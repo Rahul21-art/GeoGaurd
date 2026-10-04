@@ -1,2 +1,5 @@
-please work only in your branch BLE-simulator
-later send the pull request from your branch
+# 🎓 BLE SIMULATOR (Part 1)
+
+> ⚠️ Work **only** in the `ble-simulator(p1)` branch, and later send a **Pull Request** to `main`.
+
+📖 **Read first:** [BLE-simulation-Steps](../docs/BLE-simulator.md)
