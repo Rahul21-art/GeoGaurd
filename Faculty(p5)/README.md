@@ -1,6 +1,5 @@
-please work only in your branch Faculty(p5)
+# 🎓 Faculty App (Part 5) ---SAFETY CHECK
+ 
+> ⚠️ Work **only** in the `Faculty(p5)` branch, and later send a **Pull Request** to `main`.
 
-later send a pull request to the main branch from yours
-
-READ faculty(p5).md from docs
-[faculty(part5) Documentation](../docs/faculty(part5).md)
+📖 **Read first:** [SAFETY-CHECK--Steps](../docs/faculty(part5).md)
