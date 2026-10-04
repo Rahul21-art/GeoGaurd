@@ -1,9 +1,5 @@
-please work only in your branch Student(p2)
+# 🎓 Faculty App (Part 4)
 
-later send a pull request to the main branch from yours
+> ⚠️ Work **only** in the `student-check(p2)` branch, and later send a **Pull Request** to `main`.
 
-YOU ARE MAINLY DEPENDED UPON BLE-simulator(P1)
-
-YOU CAN START ONCE THEY ARE READY
-
-READ student(p2).md from docs
+📖 **Read first:** [student app-Steps](../docs/Student(p2).md)
