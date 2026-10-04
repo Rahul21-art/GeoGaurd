@@ -1,8 +1,5 @@
-please work only in your branch Faculty(p4)
-later send a pull request to the main branch from yours
+# 🎓 Faculty App (Part 4)
 
-YOU ARE MAINLY DEPENDED UPON BACKEND(P3) PLUS SAFETY LOGIC(P5)
+> ⚠️ Work **only** in the `Faculty(p4)` branch, and later send a **Pull Request** to `main`.
 
-YOU CAN START ONCE THEY ARE READY
-
-READ faculty(p4.md) from docs
+📖 **Read first:** [Faculty Steps](../docs/faculty%28p4%29.md)
