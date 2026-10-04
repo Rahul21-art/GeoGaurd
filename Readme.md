@@ -1,19 +1,47 @@
-Student Outing Safety Tracker
+# 🎒 Student Outing Safety Tracker
 
-A simple student safety tracking system designed for faculty to monitor students during an outing.
-
-The idea is simple:
-
-A student carries an ESP32-based tracking device. The ESP32 communicates with the student's phone using Bluetooth. The student's phone gets the location and sends the required information to the backend. The faculty can then monitor all students from their own phone.
-
-If a student goes outside the permitted safety radius, the system identifies it and alerts the faculty. If the student presses the SOS button, the faculty can also see the emergency status and contact that particular student.
+> A mobile-based student outing safety system that connects an ESP32 tracking device to the student's phone, sends location data through a backend, calculates safety-zone status, and gives faculty real-time monitoring and emergency action capabilities.
 
 ---
 
-How the Complete System Works
+## 📑 Table of Contents
 
-Think of the project as one system divided into 5 connected parts.
+1. [Overview](#1-overview)
+2. [How the Complete System Works](#2-how-the-complete-system-works)
+3. [The Real-Life Situation](#3-the-real-life-situation)
+4. [The Five Parts](#4-the-five-parts)
+5. [How the Five Parts Connect](#5-how-the-five-parts-connect)
+6. [Example Scenarios](#6-example-scenarios)
+7. [What Each Member Should Focus On](#7-what-each-member-should-focus-on)
+8. [Common Student Data](#8-common-student-data)
+9. [Important Team Rule](#9-important-team-rule)
+10. [Development Order](#10-development-order)
+11. [Final Goal](#11-final-goal)
+12. [Project Structure](#12-project-structure)
 
+---
+
+## 1. Overview
+
+A simple student safety tracking system designed for **faculty to monitor students during an outing**.
+
+The idea is simple:
+
+1. A student carries an **ESP32-based tracking device**.
+2. The ESP32 communicates with the student's phone using **Bluetooth**.
+3. The student's phone gets the **location** and sends the required information to the **backend**.
+4. The faculty monitors all students from their **own phone**.
+
+If a student goes **outside the permitted safety radius**, the system identifies it and alerts the faculty.
+If the student presses the **SOS button**, the faculty can see the emergency status and **contact that particular student**.
+
+---
+
+## 2. How the Complete System Works
+
+The project is **one system divided into 5 connected parts**.
+
+```text
 ESP32
   ↓
 Student Phone
@@ -23,64 +51,61 @@ Backend
 Faculty App
   ↓
 Safety & Alerts
+```
 
-Each member works on one part.
+| Part | Component | Owner |
+|:----:|-----------|:-----:|
+| **Part 1** | ESP32 Bluetooth Simulator | Member 1 |
+| **Part 2** | Student App | Member 2 |
+| **Part 3** | Backend | Member 3 |
+| **Part 4** | Faculty App | Member 4 |
+| **Part 5** | Safety Engine + Alerts | Member 5 |
 
-The five parts are:
-
-Part 1 → ESP32 Bluetooth Simulator
-Part 2 → Student App
-Part 3 → Backend
-Part 4 → Faculty App
-Part 5 → Safety Engine + Alerts
-
-These are not five separate projects.
-
-They are five parts of one project.
+> These are **not five separate projects**. They are **five parts of one project**.
 
 ---
 
-The Real-Life Situation
+## 3. The Real-Life Situation
 
-Imagine a faculty member takes 25 students for a Sunday outing.
+Imagine a faculty member takes **25 students** for a Sunday outing.
 
 The faculty wants to know:
 
-- Where are the students?
-- Are they still within the permitted area?
-- Is anyone moving too far away?
-- Has anyone pressed the SOS button?
-- When was each student's location last updated?
-- Can the faculty immediately contact the student if there is a problem?
+- 📍 Where are the students?
+- 🟢 Are they still within the permitted area?
+- 🔴 Is anyone moving too far away?
+- 🚨 Has anyone pressed the SOS button?
+- 🕒 When was each student's location last updated?
+- 📞 Can the faculty immediately contact the student if there is a problem?
 
-Instead of the faculty manually checking every student, our system continuously collects the required information and shows it in one place.
+Instead of the faculty manually checking every student, the system **continuously collects the required information and shows it in one place**.
 
 ---
 
-Part 1 — ESP32 Bluetooth Simulator
+## 4. The Five Parts
 
-Responsible Member: Member 1
+### Part 1 — ESP32 Bluetooth Simulator
 
-Part 1 represents the student's physical tracking device.
+**Responsible:** Member 1
 
-For development and demonstration, we use a website-based ESP32 simulator.
+Part 1 represents the student's **physical tracking device**.
 
-The simulator behaves like an ESP32 Bluetooth device and advertises the student's identity/data through Bluetooth.
+For development and demonstration, we use a **website-based ESP32 simulator**. It behaves like an ESP32 Bluetooth device and advertises the student's identity/data through Bluetooth.
 
-Example:
-
+```text
 Student 001
 BLE Device
+```
 
-The purpose of Part 1 is mainly to establish the Bluetooth communication with the Student App.
+The purpose of Part 1 is mainly to establish the **Bluetooth communication with the Student App**.
 
-Part 1 does:
-
+```text
 ESP32 Simulator
       ↓ BLE
 Student Phone
+```
 
-Part 1 does NOT:
+**Part 1 does NOT:**
 
 - Manage the faculty dashboard
 - Calculate the safety radius
@@ -90,20 +115,18 @@ Part 1 does NOT:
 
 ---
 
-Part 2 — Student App
+### Part 2 — Student App
 
-Responsible Member: Member 2
+**Responsible:** Member 2
 
-The Student App runs on the student's phone.
+The Student App runs on the **student's phone**.
 
-It connects to the ESP32 Bluetooth device from Part 1.
+- Connects to the ESP32 Bluetooth device from Part 1
+- Receives the required information through Bluetooth
+- Accesses the student's location through GPS/location services
+- Sends the required information to the backend
 
-The phone receives the required information through Bluetooth and also has access to the student's location through GPS/location services.
-
-The Student App then sends the required information to the backend.
-
-Conceptually:
-
+```text
 ESP32
   ↓ Bluetooth
 Student Phone
@@ -111,63 +134,63 @@ Student Phone
 GPS + Student Information
   ↓
 Backend
+```
 
-The Student App is the bridge between the physical tracking device and the online system.
+> The Student App is the **bridge** between the physical tracking device and the online system.
 
 ---
 
-Part 3 — Backend
+### Part 3 — Backend
 
-Responsible Member: Member 3
+**Responsible:** Member 3
 
-The backend is the middle layer connecting the Student App and Faculty App.
+The backend is the **middle layer** connecting the Student App and Faculty App.
 
-It receives student information from the Student App and makes that information available to the rest of the system.
+It receives student information from the Student App and makes it available to the rest of the system:
 
-For example:
-
+```text
 Student ID
 Location
 Battery
 SOS status
 Last updated time
 Phone number
+```
 
-The backend should store/serve the information in a consistent format.
-
-The basic flow is:
-
+```text
 Student App
       ↓
-    Backend
+   Backend
       ↓
 Faculty App
+```
 
-The backend should be designed so that Parts 4 and 5 can use the same student data.
+The backend must store/serve information in a **consistent format**, so Parts 4 and 5 can use the **same student data**.
 
 ---
 
-Part 4 — Faculty App
+### Part 4 — Faculty App
 
-Responsible Member: Member 4
+**Responsible:** Member 4
 
-The Faculty App is the interface used by the faculty member.
+The Faculty App is the **interface used by the faculty member**.
 
-The faculty does not need to interact with the ESP32 or Bluetooth directly.
+The faculty does not interact with the ESP32 or Bluetooth directly. Instead, the app receives the processed student information from the backend/safety system.
 
-Instead, the Faculty App receives the processed student information from the backend/safety system.
+**Safe student:**
 
-The faculty can see:
-
+```text
 Student 001
 🟢 SAFE
 
 Distance: 8.4 km
 Battery: 87%
 Updated: 10 seconds ago
+```
 
-If a student is outside the permitted area:
+**Student outside the permitted area:**
 
+```text
 Student 001
 🔴 OUT OF RANGE
 
@@ -176,67 +199,56 @@ Allowed: 15 km
 
 [📞 CALL STUDENT]
 [📍 VIEW LOCATION]
+```
 
-The Faculty App should be mobile-friendly because the faculty will use their phone during the outing.
+> The Faculty App must be **mobile-friendly**, because faculty will use their phone during the outing.
 
 ---
 
-Part 5 — Safety Engine + Alerts
+### Part 5 — Safety Engine + Alerts
 
-Responsible Member: Member 5
+**Responsible:** Member 5
 
-Part 5 is where the system makes the actual safety decision.
+Part 5 is where the system makes the **actual safety decision**.
 
 It receives the student's location and compares it with the outing's permitted safety area.
 
-For our current project:
-
+```text
 Allowed Radius = 15 km
+```
 
-The system has an outing center location.
+The system has an **outing center location** and calculates:
 
-It calculates:
-
+```text
 Student Location
        ↓
 Distance from Outing Center
        ↓
 Compare with 15 km
+```
 
-For example:
+| Student Distance | Allowed Radius | Result |
+|:----------------:|:--------------:|--------|
+| 8.5 km | 15 km | 🟢 **SAFE** (8.5 < 15) |
+| 15.6 km | 15 km | 🔴 **OUT OF RANGE** (15.6 > 15) |
 
-Student distance = 8.5 km
-Allowed radius = 15 km
+Part 5 also handles important events:
 
-8.5 < 15
-
-🟢 SAFE
-
-If:
-
-Student distance = 15.6 km
-Allowed radius = 15 km
-
-15.6 > 15
-
-🔴 OUT OF RANGE
-
-Part 5 also handles important events such as:
-
+```text
 SAFE
 OUT OF RANGE
 SOS
 LOCATION UNAVAILABLE
 BACK IN SAFE AREA
+```
 
-When an important event occurs, the Faculty App can show the appropriate alert.
+When an important event occurs, the Faculty App shows the appropriate alert.
 
 ---
 
-How the Five Parts Connect
+## 5. How the Five Parts Connect
 
-The complete system looks like this:
-
+```text
 ┌──────────────────────┐
 │       PART 1         │
 │ ESP32 BLE Simulator  │
@@ -269,19 +281,20 @@ The complete system looks like this:
 │       PART 4         │
 │    Faculty App       │
 └──────────────────────┘
+```
 
-The important thing is that Part 4 and Part 5 work together.
-
-Part 5 decides what is happening.
-
-Part 4 shows it to the faculty.
+> **Part 4 and Part 5 work together.**
+> **Part 5 decides** what is happening. **Part 4 shows it** to the faculty.
 
 ---
 
-Example: Normal Student
+## 6. Example Scenarios
 
-Suppose Student 001 is inside the permitted area.
+### 🟢 Normal Student
 
+Student 001 is inside the permitted area.
+
+```text
 GPS Location
      ↓
 Backend
@@ -295,22 +308,26 @@ Part 5 calculates distance
 🟢 SAFE
      ↓
 Faculty App
+```
 
 Faculty sees:
 
+```text
 Student 001
 
 🟢 SAFE
 
 Distance: 8.4 km
 Battery: 87%
+```
 
 ---
 
-Example: Student Goes Out of Range
+### 🔴 Student Goes Out of Range
 
 Student 001 moves outside the permitted area.
 
+```text
 GPS Location
      ↓
 Backend
@@ -324,9 +341,11 @@ Part 5
 🔴 OUT OF RANGE
      ↓
 Faculty App
+```
 
 Faculty sees:
 
+```text
 🚨 STUDENT OUT OF RANGE
 
 Student 001
@@ -335,17 +354,17 @@ Allowed: 15 km
 
 [📞 CALL STUDENT]
 [📍 VIEW LOCATION]
+```
 
-The faculty can immediately call that particular student's registered phone number.
-
-The app uses the phone's normal dialer rather than building a separate calling system.
+The faculty can immediately call that particular student's registered phone number. The app uses the **phone's normal dialer** rather than building a separate calling system.
 
 ---
 
-Example: SOS
+### 🚨 SOS
 
 If the student presses the SOS button:
 
+```text
 SOS Button
      ↓
 Student Device
@@ -359,86 +378,80 @@ Part 5
 🚨 SOS ACTIVE
      ↓
 Faculty App
+```
 
-The faculty sees:
+Faculty sees:
 
+```text
 🚨 SOS ACTIVE
 
 Student 001
 
 [📞 CALL STUDENT]
 [📍 VIEW LOCATION]
+```
 
-SOS is treated as a high-priority event.
+> SOS is treated as a **high-priority event**.
 
 ---
 
-What Each Member Should Focus On
+## 7. What Each Member Should Focus On
 
-Member 1 — Part 1
+### Member 1 — Part 1
 
-Focus only on:
-
+```text
 ESP32 / BLE Simulator
         ↓
 Bluetooth communication
+```
 
-Make sure the Student App can detect/connect to the simulated ESP32.
+Make sure the Student App can **detect/connect** to the simulated ESP32.
 
----
+### Member 2 — Part 2
 
-Member 2 — Part 2
-
-Focus on:
-
+```text
 BLE
 GPS
 Student information
         ↓
 Backend
+```
 
-Make sure the phone can receive the required device information and send the student's data to the backend.
+Make sure the phone can **receive the device information** and **send the student's data to the backend**.
 
----
+### Member 3 — Part 3
 
-Member 3 — Part 3
-
-Focus on:
-
+```text
 Student App
       ↓
 Backend
       ↓
 Data for Parts 4 & 5
+```
 
-Make sure the data is stored and available consistently.
+Make sure the data is **stored and available consistently**.
 
----
+### Member 4 — Part 4
 
-Member 4 — Part 4
-
-Focus on:
-
+```text
 Backend/Safety Data
         ↓
 Faculty Mobile App
+```
 
-Make the faculty interface clear and easy to use.
+Make the faculty interface **clear and easy to use**.
 
 Important actions:
 
-View student
-View status
-View location
-See alerts
-Call particular student
+- View student
+- View status
+- View location
+- See alerts
+- Call particular student
 
----
+### Member 5 — Part 5
 
-Member 5 — Part 5
-
-Focus on:
-
+```text
 Student coordinates
         ↓
 Distance calculation
@@ -448,40 +461,36 @@ Distance calculation
 Safety status
         ↓
 Alerts/events
+```
 
-This member is responsible for the actual safety logic.
+This member is responsible for the **actual safety logic**.
 
 ---
 
-Common Student Data
+## 8. Common Student Data
 
-All five parts should agree on the same basic student identity.
+All five parts must agree on the **same basic student identity**.
 
-Example:
-
+```text
 Student ID: ST001
+```
 
-Do not use different IDs in different parts.
+> ⚠️ **Do not use different IDs in different parts.**
 
-For example, avoid:
+| ❌ Wrong | ✅ Correct |
+|----------|-----------|
+| Part 1 → `student001` | Part 1 → `ST001` |
+| Part 2 → `S001` | Part 2 → `ST001` |
+| Part 3 → `1` | Part 3 → `ST001` |
+| Part 4 → `Rahul` | Part 4 → `ST001` |
 
-Part 1 → student001
-Part 2 → S001
-Part 3 → 1
-Part 4 → Rahul
+The student's **name can be stored separately**.
 
-Use one consistent identifier:
-
-ST001
-
-The student's name can be stored separately.
-
----
-
-Example Common Data
+### Example Common Data
 
 A student record can conceptually contain:
 
+```json
 {
   "studentId": "ST001",
   "name": "Student 001",
@@ -492,79 +501,66 @@ A student record can conceptually contain:
   "sos": false,
   "lastUpdated": "..."
 }
+```
 
 Part 5 can add calculated information:
 
+```json
 {
   "distanceKm": 8.4,
   "safeRadiusKm": 15,
   "status": "SAFE"
 }
+```
 
-The exact implementation can differ, but the meaning of the fields should remain consistent.
-
----
-
-Important Team Rule
-
-Do not independently change the architecture.
-
-Before changing something that affects another part, discuss it with the team.
-
-For example:
-
-If Member 3 changes:
-
-studentId
-
-Member 2, Member 4 and Member 5 may also need to change their code.
-
-Similarly, if the backend changes the location format, every part using that location must be checked.
+> The exact implementation can differ, but the **meaning of the fields must remain consistent**.
 
 ---
 
-Development Order
+## 9. Important Team Rule
 
-The project should be developed in this order:
+> **Do not independently change the architecture.**
+> Before changing something that affects another part, **discuss it with the team**.
 
+**Example:** If Member 3 changes `studentId`, then Members 2, 4 and 5 may also need to change their code.
+
+Similarly, if the backend changes the **location format**, every part using that location must be checked.
+
+---
+
+## 10. Development Order
+
+Develop the project in this order:
+
+```text
 1. Part 1
    BLE simulator works
-
         ↓
-
 2. Part 2
    Student App connects to BLE
-
         ↓
-
 3. Part 3
    Student App sends data to backend
-
         ↓
-
 4. Part 5
    Distance + safety calculation works
-
         ↓
-
 5. Part 4
    Faculty sees the complete information
-
         ↓
-
 6. Final Integration
    Test everything together
+```
 
-Individual members can develop their UI and code independently, but final integration should follow this overall flow.
+Individual members can develop their UI and code independently, but **final integration should follow this overall flow**.
 
 ---
 
-Final Goal
+## 11. Final Goal
 
-At the end, the faculty should be able to open one mobile-friendly Faculty App and understand the situation immediately.
+At the end, the faculty should be able to open **one mobile-friendly Faculty App** and understand the situation immediately.
 
-For example:
-
+```text
 STUDENT SAFETY MONITOR
 
 Total Students: 25
@@ -593,11 +589,11 @@ ST003
 
 [📞 CALL STUDENT]
 [📍 VIEW LOCATION]
+```
 
-The goal is not just to display data.
+The goal is **not just to display data**. The goal is to create a simple chain:
 
-The goal is to create a simple chain:
-
+```text
 DETECT
   ↓
 UNDERSTAND
@@ -605,21 +601,17 @@ UNDERSTAND
 ALERT
   ↓
 ACT
+```
 
-The system detects the student's location, understands whether the student is safe, alerts the faculty when something requires attention, and gives the faculty an immediate action such as calling the student or viewing their location.
-
----
-
-One-Line Project Summary
-
-«A mobile-based student outing safety system that connects an ESP32 tracking device to the student's phone, sends location data through a backend, calculates safety-zone status, and gives faculty real-time monitoring and emergency action capabilities.»
+The system **detects** the student's location, **understands** whether the student is safe, **alerts** the faculty when something requires attention, and gives the faculty an immediate **action** such as calling the student or viewing their location.
 
 ---
 
-Project Structure
+## 12. Project Structure
 
-Each part should remain clearly separated in the project:
+Each part should remain **clearly separated** in the project:
 
+```text
 project/
 │
 ├── part1-esp32-ble/
@@ -633,7 +625,7 @@ project/
 ├── part5-safety-engine/
 │
 └── README.md
+```
 
-The "README.md" is the common document for all five members.
-
-Each member should read this file before starting work so everyone understands how their part fits into the complete system.
+The `README.md` is the **common document for all five members**.
+Each member should read this file **before starting work**, so everyone understands how their part fits into the complete system.
