@@ -1,27 +1,49 @@
-BLE Simulator — Part 1
+# BLE Simulator — Part 1
 
-1. Goal
+> Simulate a GPS + ESP32 student tracker end to end, before any hardware exists.
 
-In Part 1, we will first create the ESP Simulator website.
+---
 
-The website will behave like a control panel for a future ESP32 tracker.
+## Table of Contents
 
-After the website works correctly, we will connect its generated tracker data to a BLE simulator on Phone A.
+1. [Overview](#1-overview)
+2. [Stage 1 — ESP Simulator Website](#2-stage-1--esp-simulator-website)
+3. [Test the ESP Simulator (Before BLE)](#3-test-the-esp-simulator-before-ble)
+4. [Stage 2 — BLE Simulator](#4-stage-2--ble-simulator)
+5. [Test BLE From the Student Phone](#5-test-ble-from-the-student-phone)
+6. [End-to-End Tests](#6-end-to-end-tests)
+7. [Final Flow](#7-final-flow)
+8. [Completion Checklist](#8-completion-checklist)
 
-The final demo flow will be:
+---
 
+# 1. Overview
+
+## 1.1 Goal
+
+In Part 1 we first build the **ESP Simulator website**. It behaves like a control panel for a future ESP32 tracker.
+
+Once the website works correctly, its generated tracker data is carried into a **BLE simulator on Phone A**, which transmits it over Bluetooth Low Energy to a student phone.
+
+### Demo flow
+
+```
 ESP Simulator Website
         ↓
-Tracker Data
+   Tracker Data
         ↓
 BLE Simulator — Phone A
         ↓
-Bluetooth / BLE
+  Bluetooth / BLE
         ↓
-Student Phone
+    Student Phone
+```
 
-Later, the BLE simulator will be replaced by the real hardware:
+### Production flow (later)
 
+The BLE simulator will be replaced by real hardware:
+
+```
 GPS
  ↓
 ESP32
@@ -29,33 +51,55 @@ ESP32
 Bluetooth / BLE
  ↓
 Student Phone
+```
+
+## 1.2 Why a Simulator?
+
+The simulator lets us test the complete software flow without waiting for the GPS + ESP32 hardware.
+
+| Simulator action | What it simulates |
+|---|---|
+| Latitude `18.1065` → `18.1100`, Longitude `83.3955` → `83.4000` | The student moves to a different location |
+| SOS `OFF` → `ON` | The student presses the SOS button |
+| Battery `87` → `85` | The tracker battery decreases |
+
+## 1.3 Fixed Contract
+
+> [!IMPORTANT]
+> The following are **fixed** and must not change. The real ESP32 will use exactly the same values.
+
+| Item | Value |
+|---|---|
+| BLE Service UUID | `12345678-1234-1234-1234-123456789001` |
+| BLE Characteristic UUID | `12345678-1234-1234-1234-123456789002` |
+| Characteristic properties | Read, Notify |
+| JSON format | `id`, `lat`, `lng`, `sos`, `battery` |
 
 ---
 
-2. Stage 1 — Create the ESP Simulator Website
+# 2. Stage 1 — ESP Simulator Website
 
-What are we creating?
+## 2.1 What We Are Creating
 
-We are creating a website that allows us to simulate the data that a real ESP32 tracker will eventually send.
+A website that simulates the data a real ESP32 tracker will eventually send. It is part of this project and is served from the project's **GitHub Pages** site.
 
-The website must provide controls for:
+## 2.2 Required Controls
 
-- Student ID
-- Latitude
-- Longitude
-- Battery percentage
-- SOS status
+| Control | Example value |
+|---|---|
+| Student ID | `ST001` |
+| Latitude | `18.1065` |
+| Longitude | `83.3955` |
+| Battery | `87` (%) |
+| SOS | `OFF` / `ON` |
 
-For example:
+The page also provides a **Generate Tracker Data** button.
 
-Student ID: ST001
-Latitude: 18.1065
-Longitude: 83.3955
-Battery: 87%
-SOS: OFF
+## 2.3 Output
 
-The website must generate this JSON:
+When the button is pressed, the website generates the following JSON and displays it on the page, so it can be checked and later sent to the BLE simulator:
 
+```json
 {
   "id": "ST001",
   "lat": 18.1065,
@@ -63,59 +107,22 @@ The website must generate this JSON:
   "sos": false,
   "battery": 87
 }
-
-This JSON format must remain unchanged because the future ESP32 will use the same format.
-
----
-
-3. Why Are We Creating the ESP Simulator?
-
-We are creating the simulator so that we can test the complete software flow without waiting for the GPS + ESP32 hardware.
-
-For example, changing:
-
-Latitude: 18.1065
-Longitude: 83.3955
-
-to:
-
-Latitude: 18.1100
-Longitude: 83.4000
-
-simulates the student moving to a different location.
-
-Similarly:
-
-SOS: OFF → ON
-
-simulates the student pressing the SOS button.
-
-And:
-
-Battery: 87 → 85
-
-simulates the tracker battery decreasing.
+```
 
 ---
 
-4. Create the ESP Simulator Website
+# 3. Test the ESP Simulator (Before BLE)
 
-The ESP Simulator should be part of this project and should be accessible from the project's GitHub Pages website.
+> [!NOTE]
+> Do **not** start BLE yet. First make sure the website itself works.
 
-The simulator page should contain:
+> Numeric values such as `18.1100` may be displayed as `18.11` by JavaScript. This is the same number and is valid.
 
-Student ID
-Latitude
-Longitude
-Battery
-SOS ON/OFF
+## 3.1 Normal Data
 
-It should also contain a button such as:
+**Input:** Student ID `ST001` · Latitude `18.1065` · Longitude `83.3955` · Battery `87` · SOS `OFF`
 
-Generate Tracker Data
-
-When the button is pressed, the website should generate:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1065,
@@ -123,44 +130,13 @@ When the button is pressed, the website should generate:
   "sos": false,
   "battery": 87
 }
+```
 
-The generated JSON should be visible on the page so that it can be checked and later sent to the BLE simulator.
+## 3.2 Location Change
 
----
+**Input:** Latitude `18.1100` · Longitude `83.4000`
 
-5. Test the ESP Simulator Before BLE
-
-Do not start BLE yet.
-
-First make sure the website itself works.
-
-Test normal data
-
-Student ID: ST001
-Latitude: 18.1065
-Longitude: 83.3955
-Battery: 87
-SOS: OFF
-
-Expected JSON:
-
-{
-  "id": "ST001",
-  "lat": 18.1065,
-  "lng": 83.3955,
-  "sos": false,
-  "battery": 87
-}
-
-Test location change
-
-Change the location to:
-
-Latitude: 18.1100
-Longitude: 83.4000
-
-Expected JSON:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1100,
@@ -168,13 +144,13 @@ Expected JSON:
   "sos": false,
   "battery": 87
 }
+```
 
-Test SOS
+## 3.3 SOS
 
-Turn SOS ON.
+**Input:** SOS `ON`
 
-Expected JSON:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1100,
@@ -182,13 +158,13 @@ Expected JSON:
   "sos": true,
   "battery": 87
 }
+```
 
-Test battery
+## 3.4 Battery
 
-Change battery to 85.
+**Input:** Battery `85`
 
-Expected JSON:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1100,
@@ -196,187 +172,116 @@ Expected JSON:
   "sos": true,
   "battery": 85
 }
+```
 
-Once these tests work, move to BLE.
-
----
-
-6. Stage 2 — Create the BLE Simulator
-
-What are we creating?
-
-Phone A will behave like the future ESP32.
-
-For this, install a BLE Peripheral/GATT Simulator.
-
-One option is:
-
-"BLE Advertiser (GATT Simulator) — Google Play" (https://play.google.com/store/apps/details?id=mini.iot.bleadvertiser)
-
-This application allows Phone A to behave as a BLE peripheral/GATT server and create custom BLE services and characteristics.
+Once these four tests pass, move on to BLE.
 
 ---
 
-7. Install the BLE Simulator
+# 4. Stage 2 — BLE Simulator
 
-On Phone A:
+## 4.1 What We Are Creating
 
-1. Open the link above.
-2. Install BLE Advertiser (GATT Simulator).
+**Phone A** behaves like the future ESP32. It runs a BLE Peripheral / GATT server app that can create custom services and characteristics.
+
+Suggested app: [BLE Advertiser (GATT Simulator) — Google Play](https://play.google.com/store/apps/details?id=mini.iot.bleadvertiser)
+
+## 4.2 Install on Phone A
+
+1. Open the Google Play link above.
+2. Install **BLE Advertiser (GATT Simulator)**.
 3. Open the application.
 4. Allow the required Bluetooth permissions.
 5. Make sure Bluetooth is enabled.
 
-Phone A will now be used as the simulated ESP32.
+## 4.3 Create the Simulated ESP32
 
----
+Create a BLE peripheral and set the device name:
 
-8. Create the Simulated ESP32
-
-Inside the BLE simulator, create a BLE peripheral.
-
-Set the device name to:
-
+```
 STUDENT_001
+```
 
-This represents the tracker assigned to Student 001.
+This represents the tracker assigned to Student 001. Future students can use `STUDENT_002`, `STUDENT_003`, `STUDENT_004`, and so on.
 
-For future students:
+## 4.4 Create the BLE Service
 
-STUDENT_002
-STUDENT_003
-STUDENT_004
+Create **one** custom service with this exact UUID:
 
-can be used.
-
----
-
-9. Create the BLE Service
-
-Create one custom BLE service.
-
-Use this exact UUID:
-
+```
 12345678-1234-1234-1234-123456789001
+```
 
-Do not change this UUID.
+> [!WARNING]
+> Do not change this UUID.
 
----
+## 4.5 Create the BLE Characteristic
 
-10. Create the BLE Characteristic
+Inside the service, create **one** characteristic with this exact UUID:
 
-Inside the service, create one characteristic.
-
-Use this exact UUID:
-
+```
 12345678-1234-1234-1234-123456789002
+```
 
 Enable:
 
-Read
-Notify
+- ✅ Read
+- ✅ Notify
 
-The characteristic is where the tracker JSON will be transmitted.
+This characteristic carries the tracker JSON.
 
----
+## 4.6 Put the Simulator Data Into BLE
 
-11. Put the Simulator Data Into BLE
+Initially, the JSON is copied manually:
 
-Initially, we will manually copy the JSON generated by the ESP Simulator website.
+1. Generate the JSON on the ESP Simulator website.
+2. Copy the JSON.
+3. Paste it into the BLE simulator's characteristic value.
+4. Start BLE advertising.
 
-For example, the website generates:
+Phone A is now acting as:
 
-{
-  "id": "ST001",
-  "lat": 18.1065,
-  "lng": 83.3955,
-  "sos": false,
-  "battery": 87
-}
-
-Copy this JSON.
-
-Then put it into the BLE simulator's characteristic value.
-
-Start BLE advertising.
-
-Phone A is now acting like:
-
+```
 ESP32 Tracker
-     |
-     v
-STUDENT_001
+      |
+      v
+ STUDENT_001
+```
+
+## 4.7 Why Copy the Data Manually?
+
+The first goal is to **prove that BLE communication works**. Manual copying is the simplest and safest way to test it:
+
+```
+ESP Simulator Website → Generate JSON → Copy JSON → BLE Simulator → BLE → Student Phone
+```
+
+Do not automate website → BLE until basic BLE communication works. Afterwards, we can investigate whether the BLE simulator provides an API or another method that lets the website control it automatically.
 
 ---
 
-12. Why Are We Manually Copying the Data Initially?
+# 5. Test BLE From the Student Phone
 
-The first goal is to prove that the BLE communication works.
+## 5.1 Install nRF Connect on Phone B
 
-Therefore, initially:
+Phone B uses a BLE testing application: [nRF Connect for Mobile — Nordic Semiconductor](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile).
 
-ESP Simulator Website
-        ↓
-Generate JSON
-        ↓
-Copy JSON
-        ↓
-BLE Simulator
-        ↓
-BLE
-        ↓
-Student Phone
+## 5.2 Discover and Connect
 
-This is the simplest and safest way to test the system.
+1. Open nRF Connect and scan for nearby BLE devices.
+2. Phone B should find `STUDENT_001`.
+3. Connect to it.
 
-We should not try to automate website → BLE communication before the basic BLE communication works.
+## 5.3 Find the Service and Characteristic
 
-Once everything works, we can investigate whether the BLE simulator provides an API or another method that allows the website to control it automatically.
+1. Find the service `12345678-1234-1234-1234-123456789001` and open it.
+2. Inside it, find the characteristic `12345678-1234-1234-1234-123456789002`. This is the tracker-data characteristic.
 
----
+## 5.4 Test Read
 
-13. Test BLE From the Student Phone
+Use the **Read** option on the characteristic. Phone B should receive:
 
-For the initial BLE test, Phone B can use a BLE testing application.
-
-A suitable option is nRF Connect for Mobile:
-
-"nRF Connect for Mobile — Nordic Semiconductor" (https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile)
-
-Install it on Phone B.
-
-Open it and scan for nearby BLE devices.
-
-Phone B should find:
-
-STUDENT_001
-
-Connect to it.
-
----
-
-14. Find the Service
-
-After connecting, find:
-
-12345678-1234-1234-1234-123456789001
-
-Open that service.
-
-Inside it, find:
-
-12345678-1234-1234-1234-123456789002
-
-This is the tracker-data characteristic.
-
----
-
-15. Test Read
-
-Use the Read option on the characteristic.
-
-Phone B should receive:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1065,
@@ -384,47 +289,27 @@ Phone B should receive:
   "sos": false,
   "battery": 87
 }
+```
 
 If this works, the basic BLE connection is working.
 
----
+## 5.5 Test Notify
 
-16. Test Notify
+Enable notifications for the characteristic. The option may be labelled **Notify**, **Enable Notifications**, or **Subscribe**.
 
-Enable notifications for the characteristic.
-
-The option may appear as:
-
-Notify
-
-or:
-
-Enable Notifications
-
-or:
-
-Subscribe
-
-After enabling notifications, Phone B will automatically receive changes sent by Phone A.
+After enabling notifications, Phone B automatically receives the changes sent by Phone A.
 
 ---
 
-17. Test Website → BLE → Student Phone
+# 6. End-to-End Tests
 
-Go back to the ESP Simulator website.
+Each test follows the same loop: **change the value on the website → generate JSON → copy it into the BLE simulator on Phone A → send/update the characteristic with Notify enabled → verify on Phone B.**
 
-Change:
+## 6.1 Location Update
 
-Latitude: 18.1065
-Longitude: 83.3955
+Change Latitude `18.1065` → `18.1100` and Longitude `83.3955` → `83.4000`.
 
-to:
-
-Latitude: 18.1100
-Longitude: 83.4000
-
-Generate the new JSON:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1100,
@@ -432,23 +317,15 @@ Generate the new JSON:
   "sos": false,
   "battery": 87
 }
+```
 
-Copy the new JSON into the BLE simulator on Phone A.
+**Expected on Phone B:** the new location is received automatically.
 
-Send/update the characteristic with Notify enabled.
+## 6.2 SOS Update
 
-Phone B should receive the new location automatically.
+Change SOS `OFF` → `ON`.
 
----
-
-18. Test SOS
-
-On the ESP Simulator website:
-
-SOS: OFF → ON
-
-The generated JSON should become:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1100,
@@ -456,23 +333,15 @@ The generated JSON should become:
   "sos": true,
   "battery": 87
 }
+```
 
-Copy the updated JSON into the BLE simulator and send the notification.
+**Expected on Phone B:** `sos = true`.
 
-Phone B should receive:
+## 6.3 Battery Update
 
-SOS = true
+Change Battery `87` → `85`.
 
----
-
-19. Test Battery
-
-On the ESP Simulator website:
-
-Battery: 87 → 85
-
-The generated JSON should become:
-
+```json
 {
   "id": "ST001",
   "lat": 18.1100,
@@ -480,17 +349,17 @@ The generated JSON should become:
   "sos": true,
   "battery": 85
 }
+```
 
-Copy the updated JSON into the BLE simulator and send the notification.
-
-Phone B should receive the updated battery value.
+**Expected on Phone B:** the updated battery value.
 
 ---
 
-20. Part 1 Final Flow
+# 7. Final Flow
 
 Once everything works, the complete simulator flow is:
 
+```
 ┌─────────────────────────┐
 │ ESP SIMULATOR WEBSITE   │
 │                         │
@@ -516,24 +385,21 @@ Once everything works, the complete simulator flow is:
 │ PHONE B                 │
 │ Student App / BLE Test  │
 └─────────────────────────┘
+```
 
-Later, the BLE simulator will be replaced by:
+Later, the BLE simulator is replaced by:
 
-GPS
- ↓
-ESP32
- ↓
-Bluetooth / BLE
- ↓
-Student Phone
+```
+GPS → ESP32 → Bluetooth / BLE → Student Phone
+```
 
-The BLE Service UUID, Characteristic UUID and JSON format will remain unchanged.
+The BLE Service UUID, Characteristic UUID, and JSON format remain **unchanged**.
 
 ---
 
-21. Part 1 Completion Checklist
+# 8. Completion Checklist
 
-ESP Simulator
+## ESP Simulator
 
 - [ ] ESP Simulator website created
 - [ ] Student ID control works
@@ -546,10 +412,10 @@ ESP Simulator
 - [ ] SOS change tested
 - [ ] Battery change tested
 
-BLE Simulator
+## BLE Simulator
 
-- [ ] BLE Advertiser/GATT Simulator installed on Phone A
-- [ ] Device created as "STUDENT_001"
+- [ ] BLE Advertiser / GATT Simulator installed on Phone A
+- [ ] Device created as `STUDENT_001`
 - [ ] Service created
 - [ ] Service UUID configured
 - [ ] Characteristic created
@@ -558,9 +424,9 @@ BLE Simulator
 - [ ] Notify enabled
 - [ ] BLE advertising started
 
-BLE Test
+## BLE Test
 
-- [ ] Phone B discovers "STUDENT_001"
+- [ ] Phone B discovers `STUDENT_001`
 - [ ] Phone B connects
 - [ ] Service discovered
 - [ ] Characteristic discovered
@@ -570,6 +436,10 @@ BLE Test
 - [ ] SOS update received
 - [ ] Battery update received
 
-When all of these work, Part 1 — BLE Simulator is complete.
+When all of these work, **Part 1 — BLE Simulator is complete.**
 
-The next stage can then be Part 2 — integrating the BLE communication into the Student App.
+---
+
+## Next Step
+
+**Part 2 — Integrating the BLE communication into the Student App.**
