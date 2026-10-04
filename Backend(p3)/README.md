@@ -1,7 +1,5 @@
-please work only in your branch Backend(p3)
+# 🎓 BACKEND (Part 3)
 
-later send a pull request to the main branch from yours
+> ⚠️ Work **only** in the `backend(p3)` branch, and later send a **Pull Request** to `main`.
 
-READ this file before starting
-
-[BACKEND STEPS](../docs/Backend.md)
+📖 **Read first:** [Faculty Steps](../docs/Backend.md)
