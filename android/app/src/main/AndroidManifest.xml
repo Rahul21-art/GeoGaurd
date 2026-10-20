@@ -10,8 +10,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Location "Allow all the time" so tracking keeps working with the screen locked -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Shake SOS: keeps the accelerometer running while the phone is locked -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- Lets the app ask to be exempt from battery optimisation so Android does not stop tracking -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -32,6 +44,16 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Shake-to-SOS: listens to the accelerometer while a student is on an outing -->
+        <service
+            android:name=".ShakeSosService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Safety feature: detects a shake gesture to send an SOS during a student outing, including when the phone is locked." />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

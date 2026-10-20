@@ -31,6 +31,9 @@ import {
   Settings, History, Users, WifiOff, Radio, RefreshCw, Navigation, Info,
   Home, RotateCcw, BellRing,
 } from 'lucide-react';
+import PermissionGate from './PermissionGate';
+import WelcomeSplash from './Welcome';
+import { useShakeSos, ShakeSosCard, ShakeCountdownOverlay } from './shakeSos';
 
 /* ============================================================================
  * 1. FIREBASE
@@ -174,6 +177,10 @@ interface StudentResult {
   status: Status;
   lastKnownStatus?: Status;
   isBreach: boolean;
+  /** Permitted radius that applies to this student (km). */
+  radiusKm: number;
+  /** True when faculty set a custom radius for this student. */
+  customRadius: boolean;
   sos: boolean;
   lowAccuracy: boolean;
   updatedAt: number | null;
@@ -199,11 +206,16 @@ interface SafetyConfig {
   staleThresholdSeconds: number;
 }
 
+/** Default permitted radius for every student, in km. Faculty can override it per student. */
+const DEFAULT_RADIUS_KM = 15;
+const MIN_RADIUS_KM = 0.5;
+const MAX_RADIUS_KM = 200;
+
 const DEFAULT_CONFIG: SafetyConfig = {
   centerLatitude: 18.1516,
   centerLongitude: 83.3756,
   centerName: 'JNTU-GV College of Engineering, Dwarapudi, Vizianagaram',
-  safeRadiusKm: 15,
+  safeRadiusKm: DEFAULT_RADIUS_KM,
   hysteresisKm: 0.2,
   accuracyThresholdMeters: 100,
   staleThresholdSeconds: 90,
@@ -219,6 +231,26 @@ function useSafetyConfig(): SafetyConfig {
     );
   }, []);
   return cfg;
+}
+
+/** Per-student radius overrides set by faculty: studentRadius/{uid} = km. Missing means "use the default". */
+function useStudentRadii(): Record<string, number> {
+  const [radii, setRadii] = useState<Record<string, number>>({});
+  useEffect(() => {
+    return onValue(
+      ref(db, 'studentRadius'),
+      (snap) => {
+        const v = snap.val() || {};
+        const clean: Record<string, number> = {};
+        Object.entries(v).forEach(([uid, km]) => {
+          if (typeof km === 'number' && isFinite(km) && km > 0) clean[uid] = km;
+        });
+        setRadii(clean);
+      },
+      () => setRadii({})
+    );
+  }, []);
+  return radii;
 }
 
 /* ============================================================================
@@ -369,7 +401,7 @@ class SafetyEngine {
     this.listeners.forEach((l) => l(event));
   }
 
-  process(s: LiveStudent, cfg: SafetyConfig, now: number): StudentResult {
+  process(s: LiveStudent, cfg: SafetyConfig, now: number, customRadius = false): StudentResult {
     const id = s.profile.rollNumber;
     const label = `${s.profile.name} (${id})`;
     let st = this.states.get(s.uid);
@@ -449,6 +481,8 @@ class SafetyEngine {
       status,
       lastKnownStatus: st.lastValid,
       isBreach,
+      radiusKm: cfg.safeRadiusKm,
+      customRadius,
       sos,
       lowAccuracy,
       updatedAt,
@@ -561,7 +595,7 @@ const AppLogoWatermark: React.FC = () => {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
       <img
-        src="/app-logo.svg"
+        src="/app-icon.png"
         alt=""
         onError={() => setFailed(true)}
         className="w-[26rem] max-w-[85%] opacity-[0.07] select-none"
@@ -586,10 +620,16 @@ const Landing: React.FC<{ onAdmin: () => void; onStudent: () => void }> = ({ onA
       </div>
     </header>
     <main className="relative z-10 max-w-5xl w-full mx-auto px-4 py-10 flex-1 flex flex-col justify-center">
-      <h2 className="text-2xl font-bold text-slate-900">Sign in</h2>
-      <p className="text-sm text-slate-600 mt-1 mb-8">Choose how you use the outing safety system.</p>
+      <div className="flex items-center gap-4 mb-8">
+        <img src="/app-icon.png" alt="" className="float-slow w-16 h-16 rounded-2xl shadow-lg shadow-blue-900/30 shrink-0" />
+        <div>
+          <p className="text-[11px] font-bold tracking-[0.25em] text-amber-600 uppercase">Welcome to the</p>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 leading-tight">JNTU-GV Tracking App</h2>
+          <p className="text-sm text-slate-600 mt-1">Choose how you use the outing safety system.</p>
+        </div>
+      </div>
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white/85 rounded-xl border border-slate-200 p-6 flex flex-col justify-between">
+        <div className="card-lift bg-white/85 rounded-xl border border-slate-200 p-6 flex flex-col justify-between">
           <div>
             <div className="w-11 h-11 rounded-lg bg-slate-900 text-white flex items-center justify-center mb-4">
               <Shield className="w-5 h-5" />
@@ -603,7 +643,7 @@ const Landing: React.FC<{ onAdmin: () => void; onStudent: () => void }> = ({ onA
             <ShieldCheck className="w-4 h-4" /> Faculty sign in
           </button>
         </div>
-        <div className="bg-white/85 rounded-xl border border-slate-200 p-6 flex flex-col justify-between">
+        <div className="card-lift bg-white/85 rounded-xl border border-slate-200 p-6 flex flex-col justify-between">
           <div>
             <div className="w-11 h-11 rounded-lg bg-blue-900 text-white flex items-center justify-center mb-4">
               <GraduationCap className="w-5 h-5" />
@@ -936,6 +976,17 @@ const VerifyEmail: React.FC<{ user: User; onChecked: () => void }> = ({ user, on
 
 const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
   const cfg = useSafetyConfig();
+  const [radiusOverride, setRadiusOverride] = useState<number | null>(null);
+  useEffect(
+    () =>
+      onValue(
+        ref(db, `studentRadius/${user.uid}`),
+        (s) => { const v = s.val(); setRadiusOverride(typeof v === 'number' && v > 0 ? v : null); },
+        () => setRadiusOverride(null)
+      ),
+    [user.uid]
+  );
+  const radiusKm = radiusOverride ?? cfg.safeRadiusKm;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lat, setLat] = useState<number | null>(null);
   const [lon, setLon] = useState<number | null>(null);
@@ -979,11 +1030,13 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
       },
       () => setReachedLoaded(true)
     );
-    get(ref(db, `telemetry/${user.uid}/sos`))
-      .then((s) => setSos(s.val() === true))
-      .catch(() => {})
-      .finally(() => setLoaded(true));
-    return () => { offProfile(); offReached(); };
+    // Live, so an SOS raised by the shake service while the screen was locked shows up here too.
+    const offSos = onValue(
+      ref(db, `telemetry/${user.uid}/sos`),
+      (s) => { setSos(s.val() === true); setLoaded(true); },
+      () => setLoaded(true)
+    );
+    return () => { offProfile(); offReached(); offSos(); };
   }, [user.uid]);
 
   // When faculty mark the student as reached, clear local SOS and warnings
@@ -1178,6 +1231,17 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
     return () => clearInterval(t);
   }, [tracking, send]);
 
+  // Shake-to-SOS (Android app). Detection runs in a native service so it works when the phone is locked.
+  const shake = useShakeSos({
+    active: tracking && isNative,
+    user,
+    auth,
+    firebaseConfig,
+    sos,
+    onSosFromShake: () => { setSos(true); setConfirmSos(false); send(true); },
+    onSosCleared: () => { setSos(false); send(false); },
+  });
+
   // Reconnect alerts. If location is not reaching the coordinator, tell the student.
   const problem: string | null = !tracking
     ? null
@@ -1238,10 +1302,10 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
   };
 
   const distance = lat !== null && lon !== null ? haversineKm(lat, lon, cfg.centerLatitude, cfg.centerLongitude) : null;
-  const out = distance !== null && distance > cfg.safeRadiusKm;
+  const out = distance !== null && distance > radiusKm;
 
   const banner = sos
-    ? { cls: 'bg-red-800', text: 'SOS is active' }
+    ? { cls: 'bg-red-800 sos-ring', text: 'SOS is active' }
     : distance === null
     ? { cls: 'bg-amber-700', text: 'Location unavailable' }
     : out
@@ -1252,6 +1316,7 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col">
+      <ShakeCountdownOverlay shake={shake} />
       <header className="bg-slate-900 text-white border-b-2 border-amber-500 sticky top-0 z-30">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -1282,6 +1347,12 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
               </p>
             </div>
           </div>
+        )}
+
+        {profile && (
+          <p className="text-sm font-semibold text-slate-700">
+            Welcome, <span className="text-blue-900 capitalize">{profile.name.split(' ')[0].toLowerCase()}</span>. Stay safe on your outing.
+          </p>
         )}
 
         {profile && (
@@ -1319,7 +1390,7 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
           </>
         ) : (
           <>
-            <div className={`rounded-xl p-5 text-white ${banner.cls}`}>
+            <div className={`rounded-xl p-5 text-white transition-colors duration-500 ${banner.cls}`}>
               <span className="text-xs font-bold bg-black/25 px-2.5 py-1 rounded">{banner.text}</span>
               <div className="mt-4 flex justify-between items-baseline">
                 <div>
@@ -1328,12 +1399,12 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-white/80 block">Permitted radius</span>
-                  <span className="text-base font-bold font-mono">{cfg.safeRadiusKm} km</span>
+                  <span className="text-base font-bold font-mono">{radiusKm} km</span>
                 </div>
               </div>
               {distance !== null && (
                 <div className="mt-3 w-full bg-black/30 rounded-full h-2 overflow-hidden">
-                  <div className="bg-white h-full rounded-full" style={{ width: `${Math.min(100, (distance / cfg.safeRadiusKm) * 100)}%` }} />
+                  <div className="bg-white h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, (distance / radiusKm) * 100)}%` }} />
                 </div>
               )}
               {gpsError && <p className="text-xs mt-3 text-white/90">{gpsError}</p>}
@@ -1347,6 +1418,8 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
               </button>
               <p className="text-[11px] text-slate-500 mt-2">Your coordinator is alerted immediately and can see your location.</p>
             </div>
+
+            <ShakeSosCard shake={shake} tracking={tracking} />
 
             <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
@@ -1399,13 +1472,95 @@ const statusBadge = (r: StudentResult) => {
   return { t: 'Signal lost', c: 'bg-amber-50 text-amber-900 border-amber-200' };
 };
 
+/** Inline editor so faculty can change the permitted radius of one student. */
+const RadiusEditor: React.FC<{
+  r: StudentResult;
+  defaultKm: number;
+  onSet: (r: StudentResult, km: number | null) => Promise<void> | void;
+}> = ({ r, defaultKm, onSet }) => {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(r.radiusKm));
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const open = () => { setVal(String(r.radiusKm)); setErr(null); setEditing(true); };
+  const save = async () => {
+    const km = Number(val);
+    if (!isFinite(km) || km < MIN_RADIUS_KM || km > MAX_RADIUS_KM) {
+      return setErr(`Enter a value from ${MIN_RADIUS_KM} to ${MAX_RADIUS_KM} km.`);
+    }
+    setBusy(true);
+    await onSet(r, km === defaultKm ? null : km);
+    setBusy(false);
+    setEditing(false);
+  };
+  const reset = async () => {
+    setBusy(true);
+    await onSet(r, null);
+    setBusy(false);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-slate-600 flex items-center gap-1.5">
+          Allowed range
+          <span className="font-mono font-bold text-slate-900">{r.radiusKm} km</span>
+          {r.customRadius
+            ? <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-semibold">Custom</span>
+            : <span className="text-slate-400">(default)</span>}
+        </span>
+        <button onClick={open} aria-label={`Change range for ${r.profile.name}`}
+          className="px-2 py-1 rounded-md bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-semibold flex items-center gap-1">
+          <Settings className="w-3 h-3" /> Change range
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-2.5 rounded-lg bg-white border border-slate-300 text-[11px] space-y-2">
+      <div className="flex items-center gap-2">
+        <label htmlFor={`rad-${r.uid}`} className="font-semibold text-slate-700 shrink-0">Range (km)</label>
+        <input id={`rad-${r.uid}`} type="number" inputMode="decimal" step="0.5" min={MIN_RADIUS_KM} max={MAX_RADIUS_KM}
+          value={val} onChange={(e) => setVal(e.target.value)} autoFocus
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+          className="w-full px-2 py-1.5 border border-slate-300 rounded-md font-mono text-xs focus:outline-none focus:border-slate-900" />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {[5, 10, 15, 25, 50].map((k) => (
+          <button key={k} type="button" onClick={() => setVal(String(k))}
+            className={`px-2 py-0.5 rounded border font-mono font-semibold ${Number(val) === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
+            {k}
+          </button>
+        ))}
+      </div>
+      {err && <p className="text-red-700 font-medium">{err}</p>}
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" onClick={reset} disabled={busy || !r.customRadius}
+          className="text-slate-600 hover:text-slate-900 underline disabled:opacity-40 disabled:no-underline">
+          Reset to default ({defaultKm} km)
+        </button>
+        <div className="flex gap-1.5">
+          <button type="button" onClick={() => setEditing(false)} disabled={busy}
+            className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-semibold">Cancel</button>
+          <button type="button" onClick={save} disabled={busy}
+            className="px-2.5 py-1 rounded-md bg-slate-900 text-white font-semibold disabled:opacity-60">{busy ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StudentCard: React.FC<{
   r: StudentResult;
   cfg: SafetyConfig;
   now: number;
   onCall: (r: StudentResult) => void;
   onReached: (r: StudentResult) => void;
-}> = ({ r, cfg, now, onCall, onReached }) => {
+  onSetRadius: (r: StudentResult, km: number | null) => Promise<void> | void;
+}> = ({ r, cfg, now, onCall, onReached, onSetRadius }) => {
   const b = statusBadge(r);
   const border = r.sos ? 'border-red-700 ring-2 ring-red-700/15' : r.isBreach ? 'border-red-400' : r.status === 'SAFE' ? 'border-slate-200' : 'border-amber-400';
   const urgent = r.sos || r.isBreach;
@@ -1416,7 +1571,7 @@ const StudentCard: React.FC<{
     ? 'bg-amber-600 hover:bg-amber-700'
     : 'bg-slate-900 hover:bg-slate-800';
   return (
-    <div className={`rounded-xl border bg-white p-4 flex flex-col justify-between ${border}`}>
+    <div className={`card-lift rounded-xl border bg-white p-4 flex flex-col justify-between ${border}`}>
       <div>
         <div className="flex items-start gap-3.5">
           <Avatar name={r.profile.name} photo={r.profile.photo} />
@@ -1449,14 +1604,15 @@ const StudentCard: React.FC<{
         <div className="mt-3 bg-slate-50 rounded-lg p-3 border border-slate-200 text-xs">
           <div className="flex justify-between">
             <span className="text-slate-600">{r.status === 'SIGNAL_LOST' ? 'Last known distance' : 'Distance from campus'}</span>
-            <span className="font-mono font-bold">{r.distanceKm !== null ? `${r.distanceKm.toFixed(2)} km` : 'Unavailable'}<span className="text-slate-400 font-normal"> / {cfg.safeRadiusKm} km</span></span>
+            <span className="font-mono font-bold">{r.distanceKm !== null ? `${r.distanceKm.toFixed(2)} km` : 'Unavailable'}<span className="text-slate-400 font-normal"> / {r.radiusKm} km</span></span>
           </div>
           {r.distanceKm !== null && (
             <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-              <div className={`h-full ${r.isBreach ? 'bg-red-600' : r.distanceKm >= cfg.safeRadiusKm * 0.85 ? 'bg-amber-500' : 'bg-emerald-600'}`}
-                style={{ width: `${Math.min(100, (r.distanceKm / cfg.safeRadiusKm) * 100)}%` }} />
+              <div className={`h-full transition-all duration-700 ease-out ${r.isBreach ? 'bg-red-600' : r.distanceKm >= r.radiusKm * 0.85 ? 'bg-amber-500' : 'bg-emerald-600'}`}
+                style={{ width: `${Math.min(100, (r.distanceKm / r.radiusKm) * 100)}%` }} />
             </div>
           )}
+          <RadiusEditor key={`${r.uid}-${r.radiusKm}-${r.customRadius}`} r={r} defaultKm={cfg.safeRadiusKm} onSet={onSetRadius} />
           {r.gpsError && <p className="mt-2 text-amber-800">{r.gpsError}</p>}
           {r.status === 'SIGNAL_LOST' && r.disconnectedAt !== null && (
             <p className="mt-2 text-amber-800">
@@ -1539,8 +1695,8 @@ const SettingsModal: React.FC<{ cfg: SafetyConfig; onClose: () => void; onSaved:
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Settings" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-      <form onSubmit={save} className="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+    <div role="dialog" aria-modal="true" aria-label="Settings" className="anim-fade fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+      <form onSubmit={save} className="anim-pop bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <h2 className="text-sm font-bold">Perimeter settings</h2>
           <button type="button" aria-label="Close" onClick={onClose}><X className="w-5 h-5 text-slate-500" /></button>
@@ -1553,7 +1709,7 @@ const SettingsModal: React.FC<{ cfg: SafetyConfig; onClose: () => void; onSaved:
           <div className="grid grid-cols-2 gap-3">
             <Field label="Latitude" htmlFor="s-lat"><input id="s-lat" type="number" step="any" value={f.centerLatitude} onChange={num('centerLatitude')} className={`${inputCls} font-mono`} /></Field>
             <Field label="Longitude" htmlFor="s-lon"><input id="s-lon" type="number" step="any" value={f.centerLongitude} onChange={num('centerLongitude')} className={`${inputCls} font-mono`} /></Field>
-            <Field label="Permitted radius (km)" htmlFor="s-rad"><input id="s-rad" type="number" step="any" value={f.safeRadiusKm} onChange={num('safeRadiusKm')} className={`${inputCls} font-mono`} /></Field>
+            <Field label="Default permitted radius (km)" htmlFor="s-rad" hint="Applies to every student unless you change it on that student's card."><input id="s-rad" type="number" step="any" value={f.safeRadiusKm} onChange={num('safeRadiusKm')} className={`${inputCls} font-mono`} /></Field>
             <Field label="Return margin (km)" htmlFor="s-hys" hint="Student must come this far inside before the alert clears."><input id="s-hys" type="number" step="any" value={f.hysteresisKm} onChange={num('hysteresisKm')} className={`${inputCls} font-mono`} /></Field>
             <Field label="Ignore GPS worse than (m)" htmlFor="s-acc"><input id="s-acc" type="number" step="any" value={f.accuracyThresholdMeters} onChange={num('accuracyThresholdMeters')} className={`${inputCls} font-mono`} /></Field>
             <Field label="Signal lost after (s)" htmlFor="s-stale"><input id="s-stale" type="number" step="any" value={f.staleThresholdSeconds} onChange={num('staleThresholdSeconds')} className={`${inputCls} font-mono`} /></Field>
@@ -1573,6 +1729,7 @@ const SettingsModal: React.FC<{ cfg: SafetyConfig; onClose: () => void; onSaved:
 
 const AdminPortal: React.FC<{ user: User }> = () => {
   const cfg = useSafetyConfig();
+  const radii = useStudentRadii();
   const engine = useRef(new SafetyEngine()).current;
   const [users, setUsers] = useState<Record<string, Profile>>({});
   const [tele, setTele] = useState<Record<string, Telemetry>>({});
@@ -1623,9 +1780,14 @@ const AdminPortal: React.FC<{ user: User }> = () => {
         live.push({ ...t, uid, profile });
       }
     });
-    setResults(live.map((s) => engine.process(s, cfg, now)));
+    setResults(
+      live.map((s) => {
+        const custom = radii[s.uid];
+        return engine.process(s, custom ? { ...cfg, safeRadiusKm: custom } : cfg, now, Boolean(custom));
+      })
+    );
     setReached(done.sort((a, b) => b.reachedAt - a.reachedAt));
-  }, [tele, users, cfg, tick, offset, engine]);
+  }, [tele, users, cfg, radii, tick, offset, engine]);
 
   const now = tick + offset;
 
@@ -1684,6 +1846,19 @@ const AdminPortal: React.FC<{ user: User }> = () => {
     }
   };
 
+  const setRadius = async (r: StudentResult, km: number | null) => {
+    try {
+      await set(ref(db, `studentRadius/${r.uid}`), km);
+      const msg = km === null
+        ? `${r.profile.name} (${r.profile.rollNumber}) range reset to default ${cfg.safeRadiusKm} km`
+        : `${r.profile.name} (${r.profile.rollNumber}) range set to ${km} km`;
+      engine.note(r.profile.rollNumber, msg, 'info');
+      showToast(msg + '.');
+    } catch (e) {
+      showToast(authError(e));
+    }
+  };
+
   const undoReached = async (r: ReachedStudent) => {
     try {
       await set(ref(db, `telemetry/${r.uid}/reachedAt`), null);
@@ -1704,7 +1879,7 @@ const AdminPortal: React.FC<{ user: User }> = () => {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col">
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+        <div className="anim-toast fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2">
           <Info className="w-4 h-4 text-amber-400" /> {toast}
         </div>
       )}
@@ -1724,7 +1899,7 @@ const AdminPortal: React.FC<{ user: User }> = () => {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-300 mt-0.5">{cfg.centerName} · radius <span className="text-amber-300 font-mono font-semibold">{cfg.safeRadiusKm} km</span></p>
+            <p className="text-xs text-slate-300 mt-0.5">{cfg.centerName} · default radius <span className="text-amber-300 font-mono font-semibold">{cfg.safeRadiusKm} km</span></p>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setShowLog(true)} className="relative px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold flex items-center gap-1.5">
@@ -1742,6 +1917,9 @@ const AdminPortal: React.FC<{ user: User }> = () => {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5">
+        <p className="text-sm text-slate-600">
+          Welcome to the <span className="font-bold text-slate-900">JNTU-GV Tracking App</span>. Students on outings appear below.
+        </p>
         <ErrorBox msg={error} />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 my-4">
@@ -1812,7 +1990,7 @@ const AdminPortal: React.FC<{ user: User }> = () => {
 
         {filter === 'REACHED' ? (
           reachedShown.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {reachedShown.map((r) => <ReachedRow key={r.uid} r={r} onUndo={undoReached} />)}
             </div>
           ) : (
@@ -1825,8 +2003,8 @@ const AdminPortal: React.FC<{ user: User }> = () => {
             </div>
           )
         ) : shown.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {shown.map((r) => <StudentCard key={r.uid} r={r} cfg={cfg} now={now} onCall={call} onReached={markReached} />)}
+          <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {shown.map((r) => <StudentCard key={r.uid} r={r} cfg={cfg} now={now} onCall={call} onReached={markReached} onSetRadius={setRadius} />)}
           </div>
         ) : (
           <div className="text-center py-14 bg-white rounded-xl border border-slate-200">
@@ -1840,8 +2018,8 @@ const AdminPortal: React.FC<{ user: User }> = () => {
       </main>
 
       {showLog && (
-        <div role="dialog" aria-modal="true" aria-label="Event log" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl flex flex-col max-h-[85vh]">
+        <div role="dialog" aria-modal="true" aria-label="Event log" className="anim-fade fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50">
+          <div className="anim-pop bg-white rounded-xl w-full max-w-lg shadow-xl flex flex-col max-h-[85vh]">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <h2 className="text-sm font-bold">Event log (this session)</h2>
               <div className="flex gap-3">
@@ -1878,6 +2056,10 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [screen, setScreen] = useState<'LANDING' | 'ADMIN' | 'STUDENT'>('LANDING');
   const [, force] = useReducer((x: number) => x + 1, 0);
+  // On the Android app, ask for every permission as soon as the app opens.
+  const [permissionsChecked, setPermissionsChecked] = useState(!isNative);
+  // Welcome screen shown on every app launch.
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
@@ -1898,6 +2080,13 @@ export default function App() {
     });
   }, []);
 
+  if (!splashDone) return <WelcomeSplash onDone={() => setSplashDone(true)} />;
+
+  // Each screen fades and slides in when it appears.
+  const page = (key: string, node: React.ReactNode) => <div key={key} className="page-enter">{node}</div>;
+
+  if (!permissionsChecked) return page('gate', <PermissionGate onDone={() => setPermissionsChecked(true)} />);
+
   if (!ready) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center text-slate-500 text-sm gap-2">
@@ -1906,11 +2095,13 @@ export default function App() {
     );
   }
 
-  if (user && role === 'ADMIN') return <AdminPortal user={user} />;
+  if (user && role === 'ADMIN') return page('admin', <AdminPortal user={user} />);
   if (user && role === 'STUDENT') {
-    return user.emailVerified ? <StudentPortal user={user} /> : <VerifyEmail user={user} onChecked={force} />;
+    return user.emailVerified
+      ? page('student', <StudentPortal user={user} />)
+      : page('verify', <VerifyEmail user={user} onChecked={force} />);
   }
-  if (screen === 'ADMIN') return <AdminLogin onBack={() => setScreen('LANDING')} />;
-  if (screen === 'STUDENT') return <StudentAuth onBack={() => setScreen('LANDING')} />;
-  return <Landing onAdmin={() => setScreen('ADMIN')} onStudent={() => setScreen('STUDENT')} />;
+  if (screen === 'ADMIN') return page('admin-login', <AdminLogin onBack={() => setScreen('LANDING')} />);
+  if (screen === 'STUDENT') return page('student-auth', <StudentAuth onBack={() => setScreen('LANDING')} />);
+  return page('landing', <Landing onAdmin={() => setScreen('ADMIN')} onStudent={() => setScreen('STUDENT')} />);
 }
