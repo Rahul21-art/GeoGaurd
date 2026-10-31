@@ -81,7 +81,18 @@ public class OutingNativePlugin extends Plugin {
     }
 
     @Override
+    protected void handleOnResume() {
+        AdminWatchService.appForeground = true;
+    }
+
+    @Override
+    protected void handleOnPause() {
+        AdminWatchService.appForeground = false;
+    }
+
+    @Override
     protected void handleOnDestroy() {
+        AdminWatchService.appForeground = false;
         if (instance == this) instance = null;
     }
 
@@ -124,7 +135,16 @@ public class OutingNativePlugin extends Plugin {
         o.put("accelerometer", hasAccel);
         o.put("shakeRunning", ShakeSosService.running);
         o.put("sosActive", ShakeSosService.isSosActive(c));
+        o.put("adminWatchRunning", AdminWatchService.running);
+        o.put("fullScreen", canFullScreen(c));
         return o;
+    }
+
+    /** Android 14+ lets the user turn off full-screen alerts per app. */
+    private boolean canFullScreen(Context c) {
+        if (Build.VERSION.SDK_INT < 34) return true;
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        return nm == null || nm.canUseFullScreenIntent();
     }
 
     private boolean granted(String permission) {
@@ -320,6 +340,55 @@ public class OutingNativePlugin extends Plugin {
     @PluginMethod
     public void clearAuth(PluginCall call) {
         SosSender.clearAuth(getContext());
+        call.resolve();
+    }
+
+    // ----------------------------------------------------- faculty alert watcher
+
+    /** Starts the background watcher that raises full-screen SOS and late-return alerts (faculty only). */
+    @PluginMethod
+    public void startAdminWatch(PluginCall call) {
+        try {
+            AdminWatchService.start(getContext());
+            call.resolve(buildStatus());
+        } catch (Exception e) {
+            call.reject("Could not start alert monitoring: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void stopAdminWatch(PluginCall call) {
+        AdminWatchService.stop(getContext());
+        call.resolve();
+    }
+
+    /** Posts a fake SOS alert in 10 seconds so faculty can lock the phone and see the real screen. */
+    @PluginMethod
+    public void sendTestAlert(PluginCall call) {
+        try {
+            AdminWatchService.sendTest(getContext());
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not send test alert: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void openFullScreenSettings(PluginCall call) {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= 34) {
+                i = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                        Uri.fromParts("package", getContext().getPackageName(), null));
+            } else {
+                i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", getContext().getPackageName(), null));
+            }
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception ignored) {
+            // settings page not available
+        }
         call.resolve();
     }
 

@@ -23,6 +23,10 @@ export interface NativeStatus {
   accelerometer: boolean;
   shakeRunning: boolean;
   sosActive: boolean;
+  /** Faculty alert watcher is running. */
+  adminWatchRunning: boolean;
+  /** Full-screen alerts are allowed (Android 14+ lets the user turn them off). */
+  fullScreen: boolean;
 }
 
 export interface AuthPayload {
@@ -50,6 +54,11 @@ export interface OutingNativePlugin {
   cancelCountdown(): Promise<void>;
   setSosActive(opts: { active: boolean }): Promise<void>;
   setAuth(opts: AuthPayload): Promise<void>;
+
+  startAdminWatch(): Promise<NativeStatus>;
+  stopAdminWatch(): Promise<void>;
+  sendTestAlert(): Promise<void>;
+  openFullScreenSettings(): Promise<void>;
   clearAuth(): Promise<void>;
 
   addListener(event: 'shakeCountdown', cb: (d: { secondsLeft: number }) => void): Promise<PluginListenerHandle>;

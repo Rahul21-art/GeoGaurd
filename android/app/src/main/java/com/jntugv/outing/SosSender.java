@@ -92,6 +92,53 @@ final class SosSender {
         return true;
     }
 
+    /** Result of a GET against the Realtime Database REST API. */
+    static final class Resp {
+        final int code;
+        final String body;
+        Resp(int code, String body) { this.code = code; this.body = body; }
+    }
+
+    /**
+     * GET {dbUrl}/{path} as the signed-in user. {@code path} may already contain a query
+     * string (for example telemetry.json?orderBy=...). Refreshes the token once on 401/403.
+     * Returns null when nobody is signed in or the network is down.
+     */
+    static Resp getJson(Context c, String path) {
+        try {
+            SharedPreferences p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String dbUrl = p.getString("dbUrl", null);
+            if (dbUrl == null) return null;
+            if (dbUrl.endsWith("/")) dbUrl = dbUrl.substring(0, dbUrl.length() - 1);
+            String token = validToken(p);
+            if (token == null) return null;
+            Resp r = get(dbUrl + "/" + path + (path.contains("?") ? "&" : "?") + "auth=" + token);
+            if (r.code == 401 || r.code == 403) {
+                token = refresh(p);
+                if (token == null) return r;
+                r = get(dbUrl + "/" + path + (path.contains("?") ? "&" : "?") + "auth=" + token);
+            }
+            return r;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Resp get(String urlStr) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        try {
+            conn.setConnectTimeout(10_000);
+            conn.setReadTimeout(20_000);
+            conn.setRequestMethod("GET");
+            int code = conn.getResponseCode();
+            InputStream in = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
+            String body = in == null ? "" : readAll(in);
+            return new Resp(code, body);
+        } finally {
+            conn.disconnect();
+        }
+    }
+
     private static String validToken(SharedPreferences p) throws Exception {
         String token = p.getString("idToken", null);
         long exp = p.getLong("expiresAt", 0);

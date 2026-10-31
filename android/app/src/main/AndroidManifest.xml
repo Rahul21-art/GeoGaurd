@@ -17,6 +17,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- Faculty: full-screen SOS and late-return alerts over the lock screen -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <!-- Lets the app ask to be exempt from battery optimisation so Android does not stop tracking -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -54,6 +57,25 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Safety feature: detects a shake gesture to send an SOS during a student outing, including when the phone is locked." />
         </service>
+
+        <!-- Faculty: watches for SOS and students not back at the hostel, even when the app is closed -->
+        <service
+            android:name=".AdminWatchService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Safety feature: watches for student SOS and late-return alerts so faculty are alerted even when the app is closed." />
+        </service>
+
+        <!-- Full-screen alert shown over the lock screen -->
+        <activity
+            android:name=".AlertActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

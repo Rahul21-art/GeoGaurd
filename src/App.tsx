@@ -34,6 +34,7 @@ import {
 import PermissionGate from './PermissionGate';
 import WelcomeSplash from './Welcome';
 import { useShakeSos, ShakeSosCard, ShakeCountdownOverlay } from './shakeSos';
+import { AlertCenter, AdminAlertsCard, ReturnNotice, returnState, useAdminWatch, formatDeadline } from './alerts';
 
 /* ============================================================================
  * 1. FIREBASE
@@ -88,6 +89,7 @@ const isNative = Capacitor.isNativePlatform();
 const NOTIF_CHANNEL = 'reconnect';
 const RECONNECT_ID = 1001;
 const BATTERY_ID = 1002;
+const RETURN_ID = 1003;
 
 async function setupNotifications() {
   try {
@@ -204,6 +206,13 @@ interface SafetyConfig {
   hysteresisKm: number;
   accuracyThresholdMeters: number;
   staleThresholdSeconds: number;
+  /** Where the hostel is. Students farther than returnDistanceKm from here after returnDeadline are reported. */
+  hostelLatitude: number;
+  hostelLongitude: number;
+  /** "HH:mm", 24-hour. */
+  returnDeadline: string;
+  returnDistanceKm: number;
+  returnAlertsEnabled: boolean;
 }
 
 /** Default permitted radius for every student, in km. Faculty can override it per student. */
@@ -219,6 +228,11 @@ const DEFAULT_CONFIG: SafetyConfig = {
   hysteresisKm: 0.2,
   accuracyThresholdMeters: 100,
   staleThresholdSeconds: 90,
+  hostelLatitude: 18.1516,
+  hostelLongitude: 83.3756,
+  returnDeadline: '18:00',
+  returnDistanceKm: 0.2,
+  returnAlertsEnabled: true,
 };
 
 function useSafetyConfig(): SafetyConfig {
@@ -1242,6 +1256,31 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
     onSosCleared: () => { setSos(false); send(false); },
   });
 
+  // Evening return rule: warn the student before the return time, and again if they are still away after it.
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const retState = tracking ? returnState(cfg, lat, lon, clock) : ({ kind: 'off' } as const);
+  const retKind = retState.kind;
+  useEffect(() => {
+    if (retKind === 'before') {
+      notifyStudent(RETURN_ID, 'Return to the hostel soon', `Be back at the hostel by ${formatDeadline(cfg.returnDeadline)}.`);
+    } else if (retKind === 'late' || retKind === 'unknown') {
+      notifyStudent(
+        RETURN_ID,
+        'You are not at the hostel',
+        retKind === 'late'
+          ? `It is past ${formatDeadline(cfg.returnDeadline)}. Your coordinator has been alerted. Please return now.`
+          : `It is past ${formatDeadline(cfg.returnDeadline)} and your location is not available. Turn on location and data.`
+      );
+    } else {
+      clearNotification(RETURN_ID);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retKind]);
+
   // Reconnect alerts. If location is not reaching the coordinator, tell the student.
   const problem: string | null = !tracking
     ? null
@@ -1418,6 +1457,8 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
               </button>
               <p className="text-[11px] text-slate-500 mt-2">Your coordinator is alerted immediately and can see your location.</p>
             </div>
+
+            {tracking && <ReturnNotice cfg={cfg} lat={lat} lon={lon} now={clock} />}
 
             <ShakeSosCard shake={shake} tracking={tracking} />
 
@@ -1681,9 +1722,14 @@ const SettingsModal: React.FC<{ cfg: SafetyConfig; onClose: () => void; onSaved:
       hysteresisKm: Number(f.hysteresisKm),
       accuracyThresholdMeters: Number(f.accuracyThresholdMeters),
       staleThresholdSeconds: Number(f.staleThresholdSeconds),
+      hostelLatitude: Number(f.hostelLatitude),
+      hostelLongitude: Number(f.hostelLongitude),
+      returnDistanceKm: Number(f.returnDistanceKm),
+      returnDeadline: /^\d{1,2}:\d{2}$/.test(String(f.returnDeadline)) ? String(f.returnDeadline) : '18:00',
+      returnAlertsEnabled: Boolean(f.returnAlertsEnabled),
     };
-    if (Object.values(clean).some((v) => typeof v === 'number' && isNaN(v)) || clean.safeRadiusKm <= 0) {
-      return setErr('Enter valid numbers. Radius must be above 0.');
+    if (Object.values(clean).some((v) => typeof v === 'number' && isNaN(v)) || clean.safeRadiusKm <= 0 || clean.returnDistanceKm <= 0) {
+      return setErr('Enter valid numbers. Radius and the hostel distance must be above 0.');
     }
     try {
       await set(ref(db, 'config/safety'), clean);
@@ -1714,6 +1760,36 @@ const SettingsModal: React.FC<{ cfg: SafetyConfig; onClose: () => void; onSaved:
             <Field label="Ignore GPS worse than (m)" htmlFor="s-acc"><input id="s-acc" type="number" step="any" value={f.accuracyThresholdMeters} onChange={num('accuracyThresholdMeters')} className={`${inputCls} font-mono`} /></Field>
             <Field label="Signal lost after (s)" htmlFor="s-stale"><input id="s-stale" type="number" step="any" value={f.staleThresholdSeconds} onChange={num('staleThresholdSeconds')} className={`${inputCls} font-mono`} /></Field>
           </div>
+
+          <div className="pt-3 mt-1 border-t border-slate-200">
+            <h3 className="text-xs font-bold text-slate-900">Return to hostel (evening alert)</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">After the return time, faculty get a full-screen alert for every student who is still farther than the allowed distance from the hostel.</p>
+            <label className="flex items-center gap-2 mt-2 text-xs font-semibold text-slate-800">
+              <input type="checkbox" checked={Boolean(f.returnAlertsEnabled)} onChange={(e) => setF({ ...f, returnAlertsEnabled: e.target.checked })} />
+              Turn on return alerts
+            </label>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <Field label="Return time" htmlFor="s-ret"><input id="s-ret" type="time" value={f.returnDeadline} onChange={(e) => setF({ ...f, returnDeadline: e.target.value })} className={`${inputCls} font-mono`} /></Field>
+              <Field label="Allowed distance from hostel (m)" htmlFor="s-retd" hint="Students within this distance may leave.">
+                <input id="s-retd" type="number" step="any" value={f.returnDistanceKm === ('' as any) ? '' : Math.round(Number(f.returnDistanceKm) * 1000)}
+                  onChange={(e) => setF({ ...f, returnDistanceKm: e.target.value === '' ? ('' as any) : Number(e.target.value) / 1000 })} className={`${inputCls} font-mono`} />
+              </Field>
+              <Field label="Hostel latitude" htmlFor="s-hlat"><input id="s-hlat" type="number" step="any" value={f.hostelLatitude} onChange={num('hostelLatitude')} className={`${inputCls} font-mono`} /></Field>
+              <Field label="Hostel longitude" htmlFor="s-hlon"><input id="s-hlon" type="number" step="any" value={f.hostelLongitude} onChange={num('hostelLongitude')} className={`${inputCls} font-mono`} /></Field>
+            </div>
+            <button type="button"
+              onClick={() => {
+                if (!navigator.geolocation) return setErr('This device cannot read its location.');
+                navigator.geolocation.getCurrentPosition(
+                  (p) => { setErr(null); setF((old) => ({ ...old, hostelLatitude: Number(p.coords.latitude.toFixed(6)), hostelLongitude: Number(p.coords.longitude.toFixed(6)) })); },
+                  () => setErr('Could not read your location. Turn on location and try again.'),
+                  { enableHighAccuracy: true, timeout: 15000 }
+                );
+              }}
+              className="mt-2 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-semibold text-slate-800">
+              Use my current location as the hostel
+            </button>
+          </div>
         </div>
         <div className="p-4 border-t border-slate-200 flex justify-between">
           <button type="button" onClick={() => setF({ ...DEFAULT_CONFIG })} className="text-xs text-slate-500 hover:text-slate-800">Restore defaults</button>
@@ -1727,8 +1803,9 @@ const SettingsModal: React.FC<{ cfg: SafetyConfig; onClose: () => void; onSaved:
   );
 };
 
-const AdminPortal: React.FC<{ user: User }> = () => {
+const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
   const cfg = useSafetyConfig();
+  const watch = useAdminWatch({ user, auth, firebaseConfig });
   const radii = useStudentRadii();
   const engine = useRef(new SafetyEngine()).current;
   const [users, setUsers] = useState<Record<string, Profile>>({});
@@ -1921,6 +1998,7 @@ const AdminPortal: React.FC<{ user: User }> = () => {
           Welcome to the <span className="font-bold text-slate-900">JNTU-GV Tracking App</span>. Students on outings appear below.
         </p>
         <ErrorBox msg={error} />
+        <div className="mt-3"><AdminAlertsCard watch={watch} /></div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 my-4">
           {[
@@ -2041,6 +2119,7 @@ const AdminPortal: React.FC<{ user: User }> = () => {
         </div>
       )}
 
+      <AlertCenter results={results} cfg={cfg} now={now} />
       {showSettings && <SettingsModal cfg={cfg} onClose={() => setShowSettings(false)} onSaved={showToast} />}
     </div>
   );
