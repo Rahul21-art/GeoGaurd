@@ -7,7 +7,7 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 | App name | JNTU-GV Outing (shown inside the app as "JNTU-GV Tracking App") |
 | Android package ID | `com.jntugv.outing` |
 | Repository | https://github.com/Rahul21-art/GeoGaurd |
-| Current version | `versionName 1.4`, `versionCode 5` (see `android/app/build.gradle`) |
+| Current version | `versionName 1.5`, `versionCode 6` (see `android/app/build.gradle`) |
 
 ## Main features
 - **Live location sharing**: students share their location during an outing, even when the screen is locked.
@@ -18,6 +18,7 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 - **Permission pop-ups at app open**: location, notifications, "Allow all the time", GPS and battery permissions are asked one after another.
 - **Full-screen SOS alerts for faculty**: name, roll number, phone, distance from the hostel and location, even when the faculty app is closed and the phone is locked.
 - **Evening return rule**: after the return time (default 6:00 PM), every student who is still more than 0.2 km from the hostel is reported to faculty as a full-screen alert.
+- **Hostel roll call**: students who stay at the hostel for 3 minutes are listed as "Arrived", and faculty can mark them all as reached with one tap. A line at the top shows how many are back.
 - **Welcome screen and smooth transitions** on every screen and button.
 
 ---
@@ -41,6 +42,7 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 16. [What is new in version 1.2](#16-what-is-new-in-version-12)
 17. [What is new in version 1.3](#17-what-is-new-in-version-13)
 18. [What is new in version 1.4](#18-what-is-new-in-version-14)
+19. [What is new in version 1.5](#19-what-is-new-in-version-15)
 
 ---
 
@@ -437,7 +439,7 @@ Version 1.3 (`versionCode 4`) adds the look-and-feel update on top of 1.2:
 
 ### How shake-to-SOS works
 1. The student starts an outing. The app starts a **foreground service** (a notification stays in the status bar). It reads the phone's motion sensor and keeps a wake lock, so it keeps working with the screen off.
-2. A hard back-and-forth shake (4 to 6 swings depending on the sensitivity setting) starts a **5-second countdown** with vibration and a notification with **Cancel** and **I'm safe** buttons.
+2. A firm back-and-forth shake (3 to 5 swings depending on the sensitivity setting, 4 at the default Medium) starts a **5-second countdown** with vibration and a notification with **Cancel** and **I'm safe** buttons.
 3. If nobody cancels, the native code writes the SOS directly to Firebase (`telemetry/{uid}/sos`) using the student's sign-in, so it works even if the web view is asleep.
 4. Faculty see the SOS live. After an SOS, the gesture can fire again once it has been cleared.
 5. The student can switch shake SOS off, change the sensitivity (Low, Medium, High) and use **Test shake** (no SOS is sent) from the card on the student portal.
@@ -477,6 +479,27 @@ Version 1.4 (`versionCode 5`) adds SOS push alerts and the evening return rule.
 - Version is `versionCode 5`, `versionName "1.4"`.
 - Publish the `.indexOn` rule from `docs/firebase-rules-update.md`.
 - After installing, open Settings in the faculty portal and set the hostel location and return time, then use **Send a test alert** on every faculty phone.
+
+## 19. What is new in version 1.5
+
+Version 1.5 (`versionCode 6`) makes shake SOS easier and adds the hostel roll call.
+
+### Easier shake SOS
+- The default (Medium) now needs a firm shake of about **4 swings** (before: a very hard shake of 5). Strength needed went down by about 40 percent.
+- Low: 5 swings, strong shake. Medium: 4 swings. High: 3 swings, light shake.
+- Walking, running and a single bump or drop are still ignored. If it triggers while walking or running, choose **Low** in the Shake to send SOS card. If it is hard to trigger, choose **High**.
+- A false trigger is harmless: the 5-second countdown can be cancelled.
+
+### Hostel roll call (faculty)
+- A summary bar at the top of the faculty portal shows "42 of 48 back at the hostel" with the names of those still out.
+- When a student stays within the allowed distance of the hostel (Settings, default 200 m) for **3 minutes** with a live signal, they appear in **Arrived at the hostel**. Faculty can untick anyone, then tap **Mark N as reached**. This uses the existing "reached hostel" action, so tracking stops for them.
+- Students with an active SOS, a lost signal, or who walk out again never count as arrived.
+- The 3-minute timer runs while the faculty portal is open. If you open the portal at 6 PM, students already at the hostel appear 3 minutes later.
+- Students see "You are at the hostel. Your coordinator will confirm your arrival."
+
+### Release notes for the release manager
+- Version is `versionCode 6`, `versionName "1.5"`.
+- No Firebase rule changes are needed for this version.
 
 ---
 

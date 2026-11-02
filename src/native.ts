@@ -72,7 +72,7 @@ export const OutingNative = registerPlugin<OutingNativePlugin>('OutingNative');
 
 /** Sensitivity levels understood by the native shake detector. */
 export const SENSITIVITY = [
-  { value: 0, label: 'Low', hint: 'Hard shake, 6 times' },
-  { value: 1, label: 'Medium', hint: 'Firm shake, 5 times' },
-  { value: 2, label: 'High', hint: 'Quick shake, 4 times' },
+  { value: 0, label: 'Low', hint: 'Firm shake, 5 times' },
+  { value: 1, label: 'Medium', hint: 'Easy shake, 4 times' },
+  { value: 2, label: 'High', hint: 'Light shake, 3 times' },
 ] as const;

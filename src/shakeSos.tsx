@@ -214,7 +214,7 @@ export const ShakeSosCard: React.FC<{ shake: ShakeSos; tracking: boolean }> = ({
       {shake.enabled && (
         <>
           <p className="text-xs text-slate-600">
-            Shake your phone hard back and forth. A 5-second countdown starts with vibration. Tap <b>Cancel</b> to stop a false alarm, otherwise your coordinator gets the SOS.
+            Shake your phone firmly back and forth about 4 times. A 5-second countdown starts with vibration. Tap <b>Cancel</b> to stop a false alarm, otherwise your coordinator gets the SOS.
           </p>
 
           <div>
@@ -227,7 +227,7 @@ export const ShakeSosCard: React.FC<{ shake: ShakeSos; tracking: boolean }> = ({
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">{SENSITIVITY[shake.sensitivity]?.hint}. Pick Low if it triggers while walking, High if it is hard to trigger.</p>
+            <p className="text-[11px] text-slate-500 mt-1">{SENSITIVITY[shake.sensitivity]?.hint}. Pick Low if it triggers while walking or running, High if it is hard to trigger.</p>
           </div>
 
           <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">

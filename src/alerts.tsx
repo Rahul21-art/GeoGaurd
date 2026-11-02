@@ -167,6 +167,47 @@ export function buildAlerts(list: AlertSource[], cfg: AlertConfig, now: number):
   return out.sort((a, b) => (a.type === b.type ? (b.distM ?? 1e9) - (a.distM ?? 1e9) : a.type === 'SOS' ? -1 : 1));
 }
 
+/* ----------------------------------------------------------- hostel arrival */
+
+/** A student must stay inside the hostel distance this long before they count as arrived. */
+export const ARRIVE_MS = 3 * 60 * 1000;
+
+export function insideHostel(cfg: AlertConfig, lat: number | null, lon: number | null): boolean {
+  const m = metresFromHostel(cfg, lat, lon);
+  return m !== null && m <= cfg.returnDistanceKm * 1000;
+}
+
+export interface ArrivalInput {
+  uid: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** The phone is sending fresh locations right now. */
+  fresh: boolean;
+  sos: boolean;
+}
+
+/**
+ * Remembers since when each student has been inside the hostel distance. A student who has stayed
+ * inside for {@link ARRIVE_MS} without a gap counts as "arrived". Leaving, losing signal or an SOS
+ * starts the wait again.
+ */
+export function trackArrivals(
+  prev: Record<string, number>,
+  list: ArrivalInput[],
+  cfg: AlertConfig,
+  now: number
+): { next: Record<string, number>; arrived: string[] } {
+  const next: Record<string, number> = {};
+  const arrived: string[] = [];
+  for (const r of list) {
+    if (r.sos || !r.fresh || !insideHostel(cfg, r.latitude, r.longitude)) continue;
+    const since = prev[r.uid] ?? now;
+    next[r.uid] = since;
+    if (now - since >= ARRIVE_MS) arrived.push(r.uid);
+  }
+  return { next, arrived };
+}
+
 /* -------------------------------------------------------------- local storage */
 
 const LS_ACK = 'outing.alerts.ack';
@@ -360,7 +401,7 @@ export const ReturnNotice: React.FC<{ cfg: AlertConfig; lat: number | null; lon:
     text = `It is past ${time} and your location is not available. Turn on location and data so your coordinator can see you.`;
   } else {
     cls = 'bg-emerald-50 border-emerald-300 text-emerald-950';
-    text = `You are at the hostel (${s.distM} m). Thank you for returning on time.`;
+    text = `You are at the hostel (${s.distM} m). Your coordinator will confirm your arrival.`;
   }
   return (
     <div className={`anim-pop rounded-xl border p-3 text-xs font-semibold flex items-start gap-2 ${cls}`}>
@@ -501,6 +542,86 @@ export const AdminAlertsCard: React.FC<{ watch: AdminWatch }> = ({ watch }) => {
           </button>
           {watch.error && <p className="text-[11px] text-red-700">{watch.error}</p>}
         </>
+      )}
+    </div>
+  );
+};
+
+/* --------------------------------------------------------- arrival panel (faculty) */
+
+export interface ArrivedStudent {
+  uid: string;
+  name: string;
+  roll: string;
+  distM: number | null;
+}
+
+interface ArrivalPanelProps {
+  arrived: ArrivedStudent[];
+  /** Students back at the hostel: already marked as reached, plus those inside the hostel distance now. */
+  backCount: number;
+  totalCount: number;
+  /** Names of students who are still away. */
+  stillOut: string[];
+  onMarkAll: (uids: string[]) => Promise<void>;
+}
+
+/** Hostel roll-call summary and the one-tap "Mark all as reached" for students who have arrived. */
+export const ArrivalPanel: React.FC<ArrivalPanelProps> = ({ arrived, backCount, totalCount, stillOut, onMarkAll }) => {
+  const [skip, setSkip] = useState<Record<string, true>>({});
+  const [busy, setBusy] = useState(false);
+  if (totalCount === 0) return null;
+
+  const chosen = arrived.filter((a) => !skip[a.uid]);
+  const toggle = (uid: string) => setSkip((p) => {
+    const n = { ...p };
+    if (n[uid]) delete n[uid]; else n[uid] = true;
+    return n;
+  });
+  const markAll = async () => {
+    if (chosen.length === 0 || busy) return;
+    const ok = window.confirm(`Mark ${chosen.length} student${chosen.length === 1 ? '' : 's'} as reached hostel? Tracking stops for them and they leave the active list.`);
+    if (!ok) return;
+    setBusy(true);
+    try { await onMarkAll(chosen.map((a) => a.uid)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="anim-fade mb-4 space-y-3">
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+        <p className="text-sm font-bold text-slate-900">
+          <span className="font-mono">{backCount}</span> of <span className="font-mono">{totalCount}</span> back at the hostel
+          {totalCount - backCount > 0 && <span className="text-slate-500 font-semibold">, {totalCount - backCount} still out</span>}
+        </p>
+        <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-full bg-emerald-600 transition-all duration-700 ease-out" style={{ width: `${Math.round((backCount / totalCount) * 100)}%` }} />
+        </div>
+        {stillOut.length > 0 && (
+          <p className="text-xs text-slate-600 mt-2">
+            Still out: {stillOut.slice(0, 6).join(', ')}{stillOut.length > 6 ? ` +${stillOut.length - 6} more` : ''}
+          </p>
+        )}
+      </div>
+
+      {arrived.length > 0 && (
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+          <h2 className="text-sm font-bold text-emerald-950">Arrived at the hostel ({arrived.length})</h2>
+          <p className="text-[11px] text-emerald-900 mt-0.5">Inside the hostel distance for 3 minutes or more. Untick anyone you want to keep tracking.</p>
+          <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto">
+            {arrived.map((a) => (
+              <label key={a.uid} className="flex items-center gap-2.5 bg-white rounded-lg border border-emerald-200 px-3 py-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={!skip[a.uid]} onChange={() => toggle(a.uid)} />
+                <span className="font-bold text-slate-900 truncate">{a.name}</span>
+                <span className="font-mono text-slate-600">{a.roll}</span>
+                <span className="ml-auto text-slate-500 shrink-0">{a.distM === null ? '' : `${a.distM} m`}</span>
+              </label>
+            ))}
+          </div>
+          <button onClick={markAll} disabled={busy || chosen.length === 0}
+            className="mt-3 w-full py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold flex items-center justify-center gap-2">
+            <Check className="w-4 h-4" /> {busy ? 'Marking…' : `Mark ${chosen.length} as reached`}
+          </button>
+        </div>
       )}
     </div>
   );

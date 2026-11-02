@@ -1,7 +1,8 @@
 package com.jntugv.outing;
 
 /**
- * Detects a deliberate, vigorous shake (not walking or a single bump).
+ * Detects a deliberate shake (not walking or a single bump). A firm shake of the phone, about
+ * 4 times back and forth, is enough at the default (Medium) level.
  *
  * A shake is a run of strong accelerations that keep REVERSING direction, quickly one after another.
  * Walking and running produce one-directional spikes, so they are ignored.
@@ -23,9 +24,9 @@ public final class ShakeDetector {
     public static final int HIGH = 2;    // easiest to trigger
 
     /** Strength of one swing, in m/s^2 of linear acceleration (gravity removed). 9.8 = 1 g. */
-    private static final float[] THRESHOLD = {26f, 21f, 16f};
+    private static final float[] THRESHOLD = {18f, 13f, 10f};
     /** Number of direction-reversing swings needed. */
-    private static final int[] NEEDED = {6, 5, 4};
+    private static final int[] NEEDED = {5, 4, 3};
 
     private static final long MIN_GAP_MS = 70;    // faster than this is sensor noise
     private static final long MAX_GAP_MS = 650;   // slower than this is not a shake rhythm

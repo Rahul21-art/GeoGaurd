@@ -34,7 +34,7 @@ import {
 import PermissionGate from './PermissionGate';
 import WelcomeSplash from './Welcome';
 import { useShakeSos, ShakeSosCard, ShakeCountdownOverlay } from './shakeSos';
-import { AlertCenter, AdminAlertsCard, ReturnNotice, returnState, useAdminWatch, formatDeadline } from './alerts';
+import { AlertCenter, AdminAlertsCard, ArrivalPanel, ReturnNotice, returnState, useAdminWatch, formatDeadline, insideHostel, metresFromHostel, trackArrivals } from './alerts';
 
 /* ============================================================================
  * 1. FIREBASE
@@ -1868,6 +1868,48 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
 
   const now = tick + offset;
 
+  // Hostel arrival: a student who stays inside the hostel distance for 3 minutes is listed as "arrived".
+  const insideSince = useRef<Record<string, number>>({});
+  const [arrivedUids, setArrivedUids] = useState<string[]>([]);
+  useEffect(() => {
+    const { next, arrived } = trackArrivals(
+      insideSince.current,
+      results.map((r) => ({
+        uid: r.uid,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        fresh: r.status !== 'SIGNAL_LOST' && r.status !== 'LOCATION_UNAVAILABLE',
+        sos: r.sos,
+      })),
+      cfg,
+      tick + offset
+    );
+    insideSince.current = next;
+    setArrivedUids((prev) => (prev.length === arrived.length && prev.every((u, i) => u === arrived[i]) ? prev : arrived));
+  }, [results, cfg, tick, offset]);
+
+  const arrivedList = useMemo(
+    () => results
+      .filter((r) => arrivedUids.includes(r.uid))
+      .map((r) => ({ uid: r.uid, name: r.profile.name, roll: r.profile.rollNumber, distM: metresFromHostel(cfg, r.latitude, r.longitude) })),
+    [results, arrivedUids, cfg]
+  );
+  const insideNow = results.filter((r) => insideHostel(cfg, r.latitude, r.longitude));
+  const stillOutNames = results.filter((r) => !insideHostel(cfg, r.latitude, r.longitude)).map((r) => r.profile.name);
+
+  const markManyReached = async (uids: string[]) => {
+    try {
+      await Promise.all(uids.map((uid) => set(ref(db, `telemetry/${uid}/reachedAt`), serverTimestamp())));
+      uids.forEach((uid) => {
+        const r = results.find((x) => x.uid === uid);
+        if (r) engine.note(r.profile.rollNumber, `${r.profile.name} (${r.profile.rollNumber}) marked as reached hostel`, 'info');
+      });
+      showToast(`${uids.length} student${uids.length === 1 ? '' : 's'} marked as reached hostel.`);
+    } catch (e) {
+      showToast(authError(e));
+    }
+  };
+
   const sorted = useMemo(() => {
     const rank = (r: StudentResult) => (r.sos ? 0 : r.isBreach ? 1 : r.status !== 'SAFE' ? 2 : 3);
     return [...results].sort((a, b) => rank(a) - rank(b) || (b.distanceKm ?? 0) - (a.distanceKm ?? 0));
@@ -1999,6 +2041,10 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
         </p>
         <ErrorBox msg={error} />
         <div className="mt-3"><AdminAlertsCard watch={watch} /></div>
+        <div className="mt-3">
+          <ArrivalPanel arrived={arrivedList} backCount={reached.length + insideNow.length} totalCount={results.length + reached.length}
+            stillOut={stillOutNames} onMarkAll={markManyReached} />
+        </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 my-4">
           {[
