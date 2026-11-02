@@ -51,3 +51,67 @@ every 10 seconds instead of only the SOS ones, which uses more mobile data and b
 The new settings (hostel location, return time, allowed distance) are saved in `config/safety` by the
 Settings screen. If your rules for `config/safety` only allow specific child names, add these:
 `hostelLatitude`, `hostelLongitude`, `returnDeadline`, `returnDistanceKm`, `returnAlertsEnabled`.
+
+
+---
+
+# Firebase rules update for version 1.6 (call-back messages)
+
+Messages from faculty are stored at `inbox/{studentUid}/{messageId}`. Faculty can write and read all of them.
+A student can read only their own inbox, and can only write the `seenAt` field of their own messages (the
+"Got it" receipt).
+
+Open **Firebase console → Realtime Database → Rules**, add this block **inside the top-level `"rules"` object**
+(next to `"telemetry"`, `"users"`, `"studentRadius"`), then click **Publish**:
+
+```json
+"inbox": {
+  ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+  "$uid": {
+    ".read": "auth != null && auth.uid === $uid",
+    "$msgId": {
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".validate": "newData.hasChildren(['text', 'createdAt'])",
+      "text": { ".validate": "newData.isString() && newData.val().length <= 200" },
+      "fromName": { ".validate": "newData.isString() && newData.val().length <= 60" },
+      "batch": { ".validate": "newData.isString() && newData.val().length <= 40" },
+      "createdAt": { ".validate": "newData.isNumber()" },
+      "seenAt": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.isNumber()"
+      },
+      "$other": { ".validate": false }
+    }
+  }
+}
+```
+
+Without this block, faculty cannot send messages (the app shows "Could not send").
+
+
+---
+
+# Firebase rules update for version 1.7 (live map path)
+
+Each student's phone saves one location point per minute at `trail/{studentUid}/{minuteNumber}` and deletes
+points older than 3 hours. Faculty can read every path. A student can write only their own path.
+
+Open **Firebase console → Realtime Database → Rules**, add this block **inside the top-level `"rules"` object**,
+then click **Publish**:
+
+```json
+"trail": {
+  "$uid": {
+    ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+    ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true)",
+    "$minute": {
+      ".validate": "newData.hasChildren(['la', 'lo'])",
+      "la": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+      "lo": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+      "$other": { ".validate": false }
+    }
+  }
+}
+```
+
+Without it the map still shows every student's pin (it uses the normal live data), but no path is drawn.

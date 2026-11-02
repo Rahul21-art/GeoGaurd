@@ -92,6 +92,27 @@ final class SosSender {
         return true;
     }
 
+    /** PUT a JSON value at {dbUrl}/{path} as the signed-in user. Refreshes the token once on 401/403. */
+    static boolean putJson(Context c, String path, String jsonBody) {
+        try {
+            SharedPreferences p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String dbUrl = p.getString("dbUrl", null);
+            if (dbUrl == null) return false;
+            if (dbUrl.endsWith("/")) dbUrl = dbUrl.substring(0, dbUrl.length() - 1);
+            String token = validToken(p);
+            if (token == null) return false;
+            int code = put(dbUrl + "/" + path + "?auth=" + token, jsonBody);
+            if (code == 401 || code == 403) {
+                token = refresh(p);
+                if (token == null) return false;
+                code = put(dbUrl + "/" + path + "?auth=" + token, jsonBody);
+            }
+            return code >= 200 && code < 300;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** Result of a GET against the Realtime Database REST API. */
     static final class Resp {
         final int code;

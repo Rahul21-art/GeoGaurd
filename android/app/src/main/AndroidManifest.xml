@@ -68,6 +68,25 @@
                 android:value="Safety feature: watches for student SOS and late-return alerts so faculty are alerted even when the app is closed." />
         </service>
 
+        <!-- Student: receives "call back" messages from the coordinator, even when the app is closed -->
+        <service
+            android:name=".InboxService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Safety feature: delivers coordinator messages to a student during an outing, even when the app is closed." />
+        </service>
+
+        <!-- Full-screen message from the coordinator, shown over the lock screen -->
+        <activity
+            android:name=".MessageActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
         <!-- Full-screen alert shown over the lock screen -->
         <activity
             android:name=".AlertActivity"

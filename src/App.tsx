@@ -29,12 +29,16 @@ import {
   Shield, ShieldCheck, GraduationCap, Lock, Mail, Phone, MapPin, Battery, BatteryCharging,
   AlertTriangle, AlertOctagon, Clock, Search, X, LogOut, Eye, EyeOff, ArrowLeft, Camera,
   Settings, History, Users, WifiOff, Radio, RefreshCw, Navigation, Info,
-  Home, RotateCcw, BellRing,
+  Home, RotateCcw, BellRing, MessageSquare
 } from 'lucide-react';
 import PermissionGate from './PermissionGate';
 import WelcomeSplash from './Welcome';
+import { UpdatePrompt } from './updater';
+import LiveMap, { type MapStudent } from './LiveMap';
+import { writeTrail, type TrailState } from './trail';
+import { MessagesModal, StudentMessageOverlay, useInboxAll, useStudentInbox, countOverdue } from './messages';
 import { useShakeSos, ShakeSosCard, ShakeCountdownOverlay } from './shakeSos';
-import { AlertCenter, AdminAlertsCard, ArrivalPanel, ReturnNotice, returnState, useAdminWatch, formatDeadline, insideHostel, metresFromHostel, trackArrivals } from './alerts';
+import { AlertCenter, AdminAlertsCard, ArrivalPanel, hostelPoint, ReturnNotice, returnState, useAdminWatch, formatDeadline, insideHostel, metresFromHostel, trackArrivals } from './alerts';
 
 /* ============================================================================
  * 1. FIREBASE
@@ -1208,6 +1212,7 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
   }, [tracking]);
 
   // update() (not set()) so the faculty's reachedAt flag is never overwritten.
+  const trailState = useRef<TrailState>({ lastBucket: 0, lastCleaned: 0 });
   const send = useCallback(
     async (sosOverride?: boolean) => {
       if (!trackingRef.current) return;
@@ -1227,6 +1232,8 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
         });
         setLastSent(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         setSendError(null);
+        // One path point per minute for the faculty live map. Not important enough to show errors.
+        if (v.lat !== null && v.lon !== null) writeTrail(db, user.uid, v.lat, v.lon, trailState.current).catch(() => {});
       } catch (e: any) {
         setSendError(
           e?.code === 'PERMISSION_DENIED'
@@ -1255,6 +1262,9 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
     onSosFromShake: () => { setSos(true); setConfirmSos(false); send(true); },
     onSosCleared: () => { setSos(false); send(false); },
   });
+
+  // Messages from the coordinator (full screen, also on the lock screen while on an outing).
+  const inbox = useStudentInbox({ db, user, auth, firebaseConfig });
 
   // Evening return rule: warn the student before the return time, and again if they are still away after it.
   const [clock, setClock] = useState(Date.now());
@@ -1356,6 +1366,7 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col">
       <ShakeCountdownOverlay shake={shake} />
+      <StudentMessageOverlay messages={inbox.unseen} onSeen={inbox.markSeen} />
       <header className="bg-slate-900 text-white border-b-2 border-amber-500 sticky top-0 z-30">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -1821,6 +1832,9 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
   const [filter, setFilter] = useState<Filter>('ALL');
   const [showLog, setShowLog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const inboxTree = useInboxAll(db);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (m: string) => {
@@ -1908,6 +1922,14 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
     } catch (e) {
       showToast(authError(e));
     }
+  };
+
+  const sendMessage = async (uids: string[], text: string) => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const fromName = user.displayName || 'Your coordinator';
+    await Promise.all(uids.map((uid) => set(ref(db, `inbox/${uid}/${id}`), { text, fromName, createdAt: serverTimestamp(), batch: id })));
+    engine.note('MESSAGE', `Message sent to ${uids.length} student${uids.length === 1 ? '' : 's'}: "${text}"`, 'info');
+    showToast(`Message sent to ${uids.length} student${uids.length === 1 ? '' : 's'}.`);
   };
 
   const sorted = useMemo(() => {
@@ -2021,6 +2043,13 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
             <p className="text-xs text-slate-300 mt-0.5">{cfg.centerName} · default radius <span className="text-amber-300 font-mono font-semibold">{cfg.safeRadiusKm} km</span></p>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => setShowMap(true)} className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5" /> Map
+            </button>
+            <button onClick={() => setShowMessages(true)} className="relative px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5" /> Message
+              {countOverdue(inboxTree, now) > 0 && <span className="px-1.5 rounded-full text-[10px] font-bold bg-red-600">{countOverdue(inboxTree, now)}</span>}
+            </button>
             <button onClick={() => setShowLog(true)} className="relative px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold flex items-center gap-1.5">
               <History className="w-3.5 h-3.5" /> Event log
               {events.length > 0 && <span className="px-1.5 rounded-full text-[10px] font-bold bg-red-600">{events.length}</span>}
@@ -2166,6 +2195,30 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
       )}
 
       <AlertCenter results={results} cfg={cfg} now={now} />
+      {showMap && (
+        <LiveMap
+          db={db}
+          now={now}
+          center={{ lat: cfg.centerLatitude, lon: cfg.centerLongitude, radiusKm: cfg.safeRadiusKm }}
+          hostel={{ ...hostelPoint(cfg), radiusKm: cfg.returnDistanceKm }}
+          students={results.map((r): MapStudent => ({
+            uid: r.uid, name: r.profile.name, roll: r.profile.rollNumber, phone: r.profile.phone,
+            lat: r.latitude, lon: r.longitude, distanceKm: r.distanceKm, status: r.status,
+            isBreach: r.isBreach, sos: r.sos, updatedAt: r.updatedAt, battery: r.battery,
+          }))}
+          onClose={() => setShowMap(false)}
+        />
+      )}
+      {showMessages && (
+        <MessagesModal
+          students={results.map((r) => ({ uid: r.uid, name: r.profile.name, roll: r.profile.rollNumber, out: !insideHostel(cfg, r.latitude, r.longitude) }))}
+          names={users}
+          tree={inboxTree}
+          now={now}
+          onClose={() => setShowMessages(false)}
+          onSend={sendMessage}
+        />
+      )}
       {showSettings && <SettingsModal cfg={cfg} onClose={() => setShowSettings(false)} onSaved={showToast} />}
     </div>
   );
@@ -2208,7 +2261,7 @@ export default function App() {
   if (!splashDone) return <WelcomeSplash onDone={() => setSplashDone(true)} />;
 
   // Each screen fades and slides in when it appears.
-  const page = (key: string, node: React.ReactNode) => <div key={key} className="page-enter">{node}</div>;
+  const page = (key: string, node: React.ReactNode) => <div key={key} className="page-enter">{node}<UpdatePrompt /></div>;
 
   if (!permissionsChecked) return page('gate', <PermissionGate onDone={() => setPermissionsChecked(true)} />);
 

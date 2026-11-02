@@ -7,7 +7,7 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 | App name | JNTU-GV Outing (shown inside the app as "JNTU-GV Tracking App") |
 | Android package ID | `com.jntugv.outing` |
 | Repository | https://github.com/Rahul21-art/GeoGaurd |
-| Current version | `versionName 1.5`, `versionCode 6` (see `android/app/build.gradle`) |
+| Current version | `versionName 1.7`, `versionCode 8` (see `android/app/build.gradle`) |
 
 ## Main features
 - **Live location sharing**: students share their location during an outing, even when the screen is locked.
@@ -19,6 +19,9 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 - **Full-screen SOS alerts for faculty**: name, roll number, phone, distance from the hostel and location, even when the faculty app is closed and the phone is locked.
 - **Evening return rule**: after the return time (default 6:00 PM), every student who is still more than 0.2 km from the hostel is reported to faculty as a full-screen alert.
 - **Hostel roll call**: students who stay at the hostel for 3 minutes are listed as "Arrived", and faculty can mark them all as reached with one tap. A line at the top shows how many are back.
+- **Call-back messages**: faculty send a full-screen message to students (still out, everyone, or picked students) and see who has seen it.
+- **Live map**: every active student on one map with coloured pins, the hostel, the safe radius and the last hour of a student's path.
+- **New version pop-up**: when a newer version is released, the app shows a pop-up with the download link.
 - **Welcome screen and smooth transitions** on every screen and button.
 
 ---
@@ -43,6 +46,8 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 17. [What is new in version 1.3](#17-what-is-new-in-version-13)
 18. [What is new in version 1.4](#18-what-is-new-in-version-14)
 19. [What is new in version 1.5](#19-what-is-new-in-version-15)
+20. [What is new in version 1.6](#20-what-is-new-in-version-16)
+21. [What is new in version 1.7](#21-what-is-new-in-version-17)
 
 ---
 
@@ -50,6 +55,7 @@ An outing safety app for JNTU-GV students. It is built as a web app (React) and 
 
 | Layer | Technology |
 |---|---|
+| Map | Leaflet 1.9.4 with OpenStreetMap tiles |
 | UI | React + TypeScript, built with Vite, styled with Tailwind CSS v4 and a custom motion system in `src/index.css` |
 | Icons | lucide-react |
 | Mobile wrapper | Capacitor 8 (`@capacitor/core`, `@capacitor/android`) |
@@ -90,7 +96,11 @@ GeoGaurd/
 │   ├── Welcome.tsx         Welcome splash screen
 │   ├── PermissionGate.tsx  Permission pop-ups shown when the app opens
 │   ├── shakeSos.tsx        Shake-to-SOS settings, countdown screen and logic
-│   ├── alerts.tsx          Faculty full-screen alerts, return-time rule, background alert switch
+│   ├── alerts.tsx          Faculty full-screen alerts, return-time rule, hostel roll call
+│   ├── messages.tsx        Call-back messages and read receipts
+│   ├── updater.tsx         "New version released" pop-up
+│   ├── LiveMap.tsx         Faculty live map (Leaflet + OpenStreetMap)
+│   ├── trail.ts            Saves and reads each student's recent path
 │   ├── native.ts           JavaScript side of our native Android plugin
 │   ├── index.css           Tailwind import and all animations / transitions
 │   └── main.tsx            Entry point
@@ -109,9 +119,13 @@ GeoGaurd/
 │           │   ├── AdminWatchService.java    Faculty background watcher (SOS and late-return checks)
 │           │   ├── AlertActivity.java        Full-screen alert over the lock screen
 │           │   ├── AlertStore.java           Alerts waiting to be acknowledged
+│           │   ├── InboxService.java         Student background watcher for coordinator messages
+│           │   ├── MessageActivity.java      Full-screen message over the lock screen
+│           │   ├── MessageStore.java         Messages waiting for "Got it"
 │           │   ├── ShakeDetector.java        Shake detection algorithm
 │           │   └── SosSender.java            Sends the SOS to Firebase from native code
 │           └── res/                          Icons, splash screens, strings
+├── version.json            Latest released version (read by the app for the update pop-up)
 ├── capacitor.config.ts     Capacitor settings (appId, appName, webDir)
 ├── vite.config.ts          Vite build settings
 ├── index.html              App entry page
@@ -251,7 +265,8 @@ Only the **release manager** (the person who has the keystore) does this.
 6. Choose the keystore file, enter the keystore password, key alias and key password, click **Next**.
 7. Select the **release** build variant and click **Create** (or **Finish**).
 8. When it finishes, click **locate**. The file is `android/app/release/app-release.apk`.
-9. Commit the version change and push it (the APK itself is not committed):
+9. Announce the release so users get the update pop-up (see section 20, "Releasing an update").
+10. Commit the version change and push it (the APK itself is not committed):
    ```bash
    git add android/app/build.gradle
    git commit -m "Release 1.4"
@@ -368,6 +383,7 @@ For anyone who wants to understand or recreate the setup:
    npm install @capacitor/core @capacitor/cli @capacitor/android
    npm install @capacitor/local-notifications @capacitor/device
    npm install @capacitor-community/background-geolocation
+   npm install leaflet@1.9.4
    ```
 3. **Write the app** in `src/` (main screen in `src/App.tsx`, entry point `src/main.tsx`).
 4. **Initialise Capacitor:**
@@ -401,6 +417,11 @@ For anyone who wants to understand or recreate the setup:
 | **Shake SOS does not work when the phone is locked** | Set location to **Allow all the time** and battery use to **Unrestricted** for the app. On Xiaomi, Oppo, Vivo, Realme and Samsung also allow **Autostart** or "Run in background". Use **Test shake** in the app to check sensitivity. |
 | **Faculty do not get alerts when the app is closed** | In the faculty portal, turn on **Alerts when the app is closed** and tap **Send a test alert**. If the test does not appear on the lock screen, fix the yellow warnings in that card: allow notifications, turn on full-screen alerts, and set battery use to Unrestricted. On Xiaomi, Oppo, Vivo, Realme and Samsung also allow Autostart. Publish the `.indexOn` rule from `docs/firebase-rules-update.md`. |
 | **Everyone is reported as "not back" after 6 PM** | Open Settings → Return to hostel and tap **Use my current location as the hostel** while standing at the hostel, then Save. The default hostel point is the campus centre. |
+| **Build error: cannot find module `leaflet`** | Run `npm install leaflet@1.9.4` in the project folder, then `npm run build` again. |
+| **Map is grey / no map pictures** | The map pictures come from OpenStreetMap and need internet. The pins still show without them. |
+| **Map shows pins but no path** | Publish the `trail` rules from `docs/firebase-rules-update.md`. Paths exist only for students who are on an outing with version 1.7 or newer. |
+| **Faculty cannot send messages ("Could not send")** | Publish the `inbox` rules from `docs/firebase-rules-update.md` (section 10). |
+| **Update pop-up does not appear** | The phone needs internet. `version.json` on GitHub must have a `versionCode` higher than the installed one, and must be pushed to the `main` branch. GitHub can take up to 5 minutes to show a new version of the file. The pop-up shows only in the Android app, and only from version 1.6 onward. |
 | **Faculty cannot save a student's range** | The Firebase rules were not published. Publish the rules from `docs/firebase-rules-update.md` (section 10). |
 | **Drive link says "request access"** | Set **General access** to **Anyone with the link** (section 9). |
 | **Update will not install over the old app** | The APK must be signed with the **same keystore** and have a **higher versionCode**. |
@@ -500,6 +521,68 @@ Version 1.5 (`versionCode 6`) makes shake SOS easier and adds the hostel roll ca
 ### Release notes for the release manager
 - Version is `versionCode 6`, `versionName "1.5"`.
 - No Firebase rule changes are needed for this version.
+
+## 20. What is new in version 1.6
+
+Version 1.6 (`versionCode 7`) adds call-back messages and the update pop-up.
+
+### Call-back messages with read receipts
+- In the faculty portal tap **Message**. Choose **Still out**, **Everyone** or **Pick students**, tap a quick message or type your own (up to 200 characters), then **Send**.
+- On the student's phone it appears as a **full-screen message** with an alarm sound until they tap **Got it**. With the app open it shows inside the app. With the app closed or the phone locked it arrives through a small background service that runs during an outing, within about 15 seconds.
+- **Recent messages** in the same window shows "seen 4/6" and the names of students who have not seen it. After 2 minutes unseen, the message is highlighted red and the **Message** button shows a red number, so you know whom to phone.
+- Messages older than 24 hours are ignored.
+- Needs the `inbox` Firebase rules in `docs/firebase-rules-update.md`.
+
+### New version pop-up
+- When the Android app opens, it reads `version.json` from this repository (`https://raw.githubusercontent.com/Rahul21-art/GeoGaurd/main/version.json`) and compares it with the installed version.
+- If `versionCode` in `version.json` is **higher** than the installed one, a pop-up shows the version name, the notes and a **Download** button that opens the Google Drive link. **Later** closes it until the next time the app opens.
+- If the phone already has that version or a newer one, no pop-up is shown.
+- The download link must point to Google Drive, Google Docs or GitHub. Any other site is ignored and the default Drive link is used.
+- Phones that still have version 1.5 or older do not have this feature. They must install 1.6 once by hand. From 1.6 onward, updates are announced automatically.
+
+### Releasing an update (every time)
+1. Raise `versionCode` and `versionName` in `android/app/build.gradle`, build the signed APK.
+2. Upload it to Google Drive using **Manage versions → Upload new version** on the existing file, so the download link stays the same.
+3. Edit `version.json` in the repository root: set `versionCode` and `versionName` to the new numbers (they must match `build.gradle`), and change `notes`. Keep `downloadUrl` as it is.
+   ```json
+   {
+     "versionCode": 8,
+     "versionName": "1.7",
+     "downloadUrl": "https://drive.google.com/file/d/1E5gWIM-2mzJvHZliGaPMVjTTyAmaThSk/view?usp=sharing",
+     "notes": ["What is new in this version"],
+     "force": false
+   }
+   ```
+4. Commit and push `version.json` to `main`. Phones that open the app after that (within about 5 minutes) show the pop-up.
+5. Set `"force": true` to hide the **Later** button (use only for important fixes).
+
+Do not change `version.json` to a higher number before the new APK is on Drive, or users will download the old file.
+
+### Release notes for the release manager
+- Version is `versionCode 7`, `versionName "1.6"`. The included `version.json` already says 7 and 1.6, so nobody sees the pop-up until you release 1.7.
+- Publish the `inbox` rules from `docs/firebase-rules-update.md`.
+- Test: send a message to a student phone with the app closed and the screen locked.
+
+## 21. What is new in version 1.7
+
+Version 1.7 (`versionCode 8`) adds the faculty live map.
+
+### Live map
+- In the faculty portal tap **Map**. You see the hostel (blue **H**, with a green circle for the allowed hostel distance), the safe radius (dashed blue circle) and a pin for every active student.
+- Pin colours: green = safe, orange = out of range, red = SOS (bigger), grey = no signal. The top bar counts each kind.
+- Tap a pin to see name, roll number, distance, last seen and battery, with **Call** and **Zoom to student**.
+- **Problems** zooms to every student who is out of range, in SOS or without signal. **Fit all** shows everyone. Students with no location yet are counted in the corner.
+- **Path:** when you select a student, the last hour of their route is drawn as a blue line (dark dot = oldest point, blue dot = newest, tap a dot for its time). If a phone dies, you can see where it was heading and where it was last seen. The path refreshes every minute.
+- The student's phone saves one point per minute and deletes points older than 3 hours. This adds only a very small amount of data.
+- Map pictures come from OpenStreetMap (free) and need internet on the faculty phone.
+
+### New dependency
+Run `npm install leaflet@1.9.4` once in the project folder before `npm run build`.
+
+### Release notes for the release manager
+- Version is `versionCode 8`, `versionName "1.7"`.
+- Publish the `trail` rules from `docs/firebase-rules-update.md`.
+- After the new APK is on Google Drive, edit `version.json` to `"versionCode": 8` and `"versionName": "1.7"` and push it, so phones show the update pop-up (see section 20).
 
 ---
 

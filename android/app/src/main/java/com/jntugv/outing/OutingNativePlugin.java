@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
@@ -390,6 +391,59 @@ public class OutingNativePlugin extends Plugin {
             // settings page not available
         }
         call.resolve();
+    }
+
+    // ------------------------------------------ messages, app version, open link
+
+    /** Starts the service that delivers coordinator messages on a student phone, even when the app is closed. */
+    @PluginMethod
+    public void startInbox(PluginCall call) {
+        try {
+            InboxService.start(getContext());
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not start messages: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void stopInbox(PluginCall call) {
+        InboxService.stop(getContext());
+        call.resolve();
+    }
+
+    /** Installed version, used to decide whether the "new version" pop-up is needed. */
+    @PluginMethod
+    @SuppressWarnings("deprecation")
+    public void getAppInfo(PluginCall call) {
+        try {
+            PackageInfo pi = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            long code = Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode;
+            JSObject o = new JSObject();
+            o.put("versionCode", code);
+            o.put("versionName", pi.versionName == null ? "" : pi.versionName);
+            call.resolve(o);
+        } catch (Exception e) {
+            call.reject("Could not read the app version");
+        }
+    }
+
+    /** Opens a web link in the browser. Only https links are allowed. */
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || !url.startsWith("https://")) {
+            call.reject("Only https links can be opened");
+            return;
+        }
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("No app can open this link");
+        }
     }
 
     // ------------------------------------------- events from the service -> JS

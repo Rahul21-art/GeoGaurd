@@ -185,3 +185,9 @@ button > svg { transition: transform 0.25s var(--ease-spring); }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Live map (Leaflet) ---------- */
+.leaflet-container img,
+.leaflet-container svg { max-width: none !important; max-height: none !important; }
+.leaflet-container { font: inherit; background: #e2e8f0; }
+.leaflet-container a[href] { filter: none; box-shadow: none; }

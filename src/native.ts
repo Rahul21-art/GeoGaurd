@@ -55,6 +55,11 @@ export interface OutingNativePlugin {
   setSosActive(opts: { active: boolean }): Promise<void>;
   setAuth(opts: AuthPayload): Promise<void>;
 
+  startInbox(): Promise<void>;
+  stopInbox(): Promise<void>;
+  getAppInfo(): Promise<{ versionCode: number; versionName: string }>;
+  openUrl(opts: { url: string }): Promise<void>;
+
   startAdminWatch(): Promise<NativeStatus>;
   stopAdminWatch(): Promise<void>;
   sendTestAlert(): Promise<void>;

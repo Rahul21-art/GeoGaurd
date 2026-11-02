@@ -1,0 +1,11 @@
+{
+  "versionCode": 7,
+  "versionName": "1.6",
+  "downloadUrl": "https://drive.google.com/file/d/1E5gWIM-2mzJvHZliGaPMVjTTyAmaThSk/view?usp=sharing",
+  "notes": [
+    "Coordinator call-back messages with read receipts",
+    "Hostel roll call and easier shake SOS",
+    "New version pop-up"
+  ],
+  "force": false
+}

@@ -217,7 +217,7 @@ const writeLS = (k: string, v: string) => { try { localStorage.setItem(k, v); } 
 
 /* -------------------------------------------------------------- alert sound */
 
-function useAlarm(active: boolean) {
+export function useAlarm(active: boolean) {
   useEffect(() => {
     if (!active) return;
     let ctx: AudioContext | null = null;
