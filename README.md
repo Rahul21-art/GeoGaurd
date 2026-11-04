@@ -587,3 +587,36 @@ Run `npm install leaflet@1.9.4` once in the project folder before `npm run build
 ---
 
 Maintained by the JNTU-GV Outing team.
+
+## 22. What is new in version 1.8: Smart Safety Mode
+
+**For the faculty app**
+- **Safety Radar** card on the dashboard. Every active student gets a risk score from 0 to 100 and a level: Low (green), Watch (yellow, 25 or more), High (red, 55 or more). Tap a student to see each reason with its points, the predicted arrival, and Call / Map buttons.
+- A **Risk badge** appears on the student card for Watch and High students.
+- **Predicted late**: from the student's distance, walking or vehicle speed and the return time, the app says whether they will reach the hostel in time, and how late.
+
+**What the score looks at**
+
+| Signal | Source |
+|---|---|
+| Time left against the time needed to get back | location, return time |
+| Moving away from the hostel near the return time | last 8 minutes of positions |
+| Low battery and fast battery drain | battery readings |
+| Phone went silent with plenty of battery (probably switched off or airplane mode) | last update age and last battery |
+| GPS off, slow updates, rough accuracy | telemetry |
+| Standing still far from the hostel for 10 minutes or more | position history |
+| Outside the permitted radius | existing zone check |
+| Isolated area now, or an isolated area ahead on the route | OpenStreetMap building / shop count within 300 m |
+| After sunset (computed from the position and date) | no internet needed |
+| Alone, or with other students within 100 m (lowers the score) | other students' positions |
+
+A phone that goes silent with a nearly empty battery is scored lower than one that goes silent with plenty of charge, because the first one most likely ran out of power.
+
+**For the student app**
+- **Leave-by reminder**: when a student is within 3 km, the app shows "The walk back is about 18 min. Start by 5:25 PM." and sends a notification when it is time to leave.
+
+**Good to know**
+- The isolated-area check uses the free Overpass API of OpenStreetMap. Only a map position is sent. If it is unreachable the check is skipped and the rest still works.
+- Speed, direction and stopping time need a few minutes of history, which the faculty app collects while it is open. The score is calculated while the faculty app is open. The lock-screen alerts of version 1.4 still work when the app is closed.
+- The score is a guide for deciding whom to call first. It is not a replacement for SOS.
+- No new Firebase rules are needed.

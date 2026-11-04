@@ -36,6 +36,8 @@ import WelcomeSplash from './Welcome';
 import { UpdatePrompt } from './updater';
 import LiveMap, { type MapStudent } from './LiveMap';
 import { writeTrail, type TrailState } from './trail';
+import { useRiskAssessments, RiskRadar, RiskBadge, LeaveNudge, type RiskStudent } from './riskUi';
+import type { RiskResult } from './risk';
 import { MessagesModal, StudentMessageOverlay, useInboxAll, useStudentInbox, countOverdue } from './messages';
 import { useShakeSos, ShakeSosCard, ShakeCountdownOverlay } from './shakeSos';
 import { AlertCenter, AdminAlertsCard, ArrivalPanel, hostelPoint, ReturnNotice, returnState, useAdminWatch, formatDeadline, insideHostel, metresFromHostel, trackArrivals } from './alerts';
@@ -1470,6 +1472,7 @@ const StudentPortal: React.FC<{ user: User }> = ({ user }) => {
             </div>
 
             {tracking && <ReturnNotice cfg={cfg} lat={lat} lon={lon} now={clock} />}
+            {tracking && <LeaveNudge cfg={cfg} lat={lat} lon={lon} now={clock} notify={(t, b) => notifyStudent(1004, t, b)} />}
 
             <ShakeSosCard shake={shake} tracking={tracking} />
 
@@ -1607,12 +1610,13 @@ const RadiusEditor: React.FC<{
 
 const StudentCard: React.FC<{
   r: StudentResult;
+  risk?: RiskResult;
   cfg: SafetyConfig;
   now: number;
   onCall: (r: StudentResult) => void;
   onReached: (r: StudentResult) => void;
   onSetRadius: (r: StudentResult, km: number | null) => Promise<void> | void;
-}> = ({ r, cfg, now, onCall, onReached, onSetRadius }) => {
+}> = ({ r, risk, cfg, now, onCall, onReached, onSetRadius }) => {
   const b = statusBadge(r);
   const border = r.sos ? 'border-red-700 ring-2 ring-red-700/15' : r.isBreach ? 'border-red-400' : r.status === 'SAFE' ? 'border-slate-200' : 'border-amber-400';
   const urgent = r.sos || r.isBreach;
@@ -1645,6 +1649,7 @@ const StudentCard: React.FC<{
           <div className="flex flex-wrap gap-1.5">
             {r.sos && <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-800 text-white">SOS emergency</span>}
             <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${b.c}`}>{b.t}</span>
+            <RiskBadge risk={risk} />
             {r.isBreach && r.status !== 'OUT_OF_RANGE' && (
               <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-800 border border-red-200">Last seen out of range</span>
             )}
@@ -1911,6 +1916,17 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
   const insideNow = results.filter((r) => insideHostel(cfg, r.latitude, r.longitude));
   const stillOutNames = results.filter((r) => !insideHostel(cfg, r.latitude, r.longitude)).map((r) => r.profile.name);
 
+  // Smart Safety Mode: risk score and predicted arrival for every active student.
+  const riskStudents = useMemo<RiskStudent[]>(
+    () => results.map((r) => ({
+      uid: r.uid, name: r.profile.name, roll: r.profile.rollNumber, phone: r.profile.phone,
+      lat: r.latitude, lon: r.longitude, accuracy: r.accuracy, battery: r.battery, status: r.status,
+      isBreach: r.isBreach, radiusKm: r.radiusKm, sos: r.sos, updatedAt: r.updatedAt,
+    })),
+    [results]
+  );
+  const risks = useRiskAssessments(riskStudents, cfg, now);
+
   const markManyReached = async (uids: string[]) => {
     try {
       await Promise.all(uids.map((uid) => set(ref(db, `telemetry/${uid}/reachedAt`), serverTimestamp())));
@@ -2074,6 +2090,9 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
           <ArrivalPanel arrived={arrivedList} backCount={reached.length + insideNow.length} totalCount={results.length + reached.length}
             stillOut={stillOutNames} onMarkAll={markManyReached} />
         </div>
+        <div className="mt-3">
+          <RiskRadar students={riskStudents} risks={risks} onCall={(uid) => { const r = results.find((x) => x.uid === uid); if (r) call(r); }} />
+        </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 my-4">
           {[
@@ -2157,7 +2176,7 @@ const AdminPortal: React.FC<{ user: User }> = ({ user }) => {
           )
         ) : shown.length > 0 ? (
           <div className="stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {shown.map((r) => <StudentCard key={r.uid} r={r} cfg={cfg} now={now} onCall={call} onReached={markReached} onSetRadius={setRadius} />)}
+            {shown.map((r) => <StudentCard key={r.uid} r={r} risk={risks[r.uid]} cfg={cfg} now={now} onCall={call} onReached={markReached} onSetRadius={setRadius} />)}
           </div>
         ) : (
           <div className="text-center py-14 bg-white rounded-xl border border-slate-200">
